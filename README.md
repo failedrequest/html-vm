@@ -30,8 +30,8 @@ Manage bhyve virtual machines from a browser — no command line required.
 
 ## Requirements
 
-- FreeBSD 15.1 (no Linux support)
-- [vm-bhyve](https://github.com/churchers/vm-bhyve) installed and initialised
+- FreeBSD 15
+- [vm-bhyve](https://github.com/churchers/vm-bhyve) installed and initialized
 - Python 3.12
 - `gotty` at `/usr/local/bin/gotty` (for serial console)
 - `setkey(8)` at `/sbin/setkey` (base system, for IPsec)
@@ -115,7 +115,7 @@ etc/rc.d/       FreeBSD rc.d service script
 
 ## Platform notes
 
-- FreeBSD only — no Linux assumptions anywhere
+- FreeBSD 15 , maybe it will work on 14 .
 - `grub` loader not present; valid loaders: `bhyveload`, `uefi`, `uefi-csm`
 - ZFS snapshot/clone/migrate require `vm_dir="zfs:pool/dataset"` in `/etc/rc.conf`
 - geventwebsocket 0.10.1 has two Python 3.12 patches applied to `handler.py` — do not reinstall without re-applying them
@@ -125,4 +125,5 @@ etc/rc.d/       FreeBSD rc.d service script
 
 ## License
 
-MIT
+BSD 2-Clause License
+
