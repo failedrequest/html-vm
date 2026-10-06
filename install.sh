@@ -1,38 +1,30 @@
 #!/bin/sh
 # install.sh — html-vm installer for FreeBSD
 #
-# Installs system pkg dependencies, creates a Python venv, installs pip
-# packages from requirements.txt, symlinks pkg-managed geventwebsocket into
-# the venv, installs the rc.d service, and enables it in /etc/rc.conf.
+# Installs all dependencies via pkg, creates a Python venv at
+# /usr/local/html-vm/.venv, symlinks pkg-managed packages in, installs the
+# rc.d service, and enables it in /etc/rc.conf.
 #
-# Safe to re-run: skips anything already done.
-# Does NOT touch vm-bhyve configuration if vm-bhyve is already installed.
+# Safe to re-run: every step is idempotent.
+# Does NOT touch vm-bhyve configuration if already installed and configured.
 #
-# Usage:
-#   sudo sh install.sh [--install-dir /path/to/html-vm]
+# Usage (from the repo root):
+#   sudo sh install.sh
 
 set -e
 
 # ---------------------------------------------------------------------------
-# Defaults
+# Paths
 # ---------------------------------------------------------------------------
-INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
-RCCONF="/etc/rc.conf"
-SERVICE_SRC="${INSTALL_DIR}/etc/rc.d/html_vm"
-SERVICE_DST="/usr/local/etc/rc.d/html_vm"
-VENV="${INSTALL_DIR}/.venv"
+APP_DIR="/usr/local/html-vm"
+VENV="${APP_DIR}/.venv"
 PYTHON="/usr/local/bin/python3.12"
 SYS_SITE="/usr/local/lib/python3.12/site-packages"
+RCCONF="/etc/rc.conf"
+SERVICE_DST="/usr/local/etc/rc.d/html_vm"
 
-# ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --install-dir) INSTALL_DIR="$2"; shift 2 ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
-    esac
-done
+# Source of the repo (directory containing this script)
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ---------------------------------------------------------------------------
 # Must run as root
@@ -43,7 +35,8 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "==> html-vm installer"
-echo "    install dir : ${INSTALL_DIR}"
+echo "    repo        : ${REPO_DIR}"
+echo "    install dir : ${APP_DIR}"
 echo "    venv        : ${VENV}"
 echo ""
 
@@ -52,128 +45,134 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "==> [1/6] Installing pkg packages ..."
 
-# Core runtime
-PKG_RUNTIME="python312 py312-gevent py312-gevent-websocket vm-bhyve gotty"
-
-# vm-bhyve may already be installed and configured — detect before installing
-VMBHYVE_ALREADY=0
+# Detect vm-bhyve before installing so we know whether it was pre-configured
+VMBHYVE_PREINSTALLED=0
 if pkg info -q vm-bhyve 2>/dev/null; then
-    VMBHYVE_ALREADY=1
-    echo "    vm-bhyve is already installed — skipping vm-bhyve first-run init"
+    VMBHYVE_PREINSTALLED=1
 fi
 
-pkg install -y ${PKG_RUNTIME}
+pkg install -y \
+    python312 \
+    py312-gevent \
+    py312-gevent-websocket \
+    py312-flask \
+    py312-blinker \
+    py312-click \
+    py312-greenlet \
+    py312-h11 \
+    py312-itsdangerous \
+    py312-Jinja2 \
+    py312-markupsafe \
+    py312-pyflakes \
+    py312-python-pam \
+    py312-simple-websocket \
+    py312-werkzeug \
+    py312-wsproto \
+    vm-bhyve \
+    gotty
 
 echo "    pkg packages OK"
 
 # ---------------------------------------------------------------------------
-# Step 2 — vm-bhyve first-run init (only if not already configured)
+# Step 2 — vm-bhyve first-run guidance (only for fresh installs)
 # ---------------------------------------------------------------------------
 echo "==> [2/6] Checking vm-bhyve configuration ..."
 
-if [ "${VMBHYVE_ALREADY}" -eq 0 ]; then
-    # vm-bhyve was just installed; ask the user to configure it.
+if [ "${VMBHYVE_PREINSTALLED}" -eq 0 ]; then
     echo ""
-    echo "    vm-bhyve was just installed."
-    echo "    You must configure it before starting html-vm:"
+    echo "    vm-bhyve was just installed. You must configure it before"
+    echo "    starting html-vm. Minimum required steps:"
     echo ""
-    echo "    1. Add to /etc/rc.conf:"
+    echo "    1. Add to ${RCCONF}:"
     echo "         vm_enable=\"YES\""
-    echo "         vm_dir=\"/var/vm\"          # or zfs:pool/dataset for ZFS features"
+    echo "         vm_dir=\"/var/vm\""
+    echo "         # Use vm_dir=\"zfs:pool/dataset\" to enable ZFS snapshots/clone"
     echo ""
     echo "    2. Initialise the datastore:"
     echo "         vm init"
     echo ""
-    echo "    3. Create at least one switch, e.g.:"
+    echo "    3. Create at least one network switch, e.g.:"
     echo "         vm switch create public"
     echo "         vm switch add public em0"
     echo ""
-    echo "    Re-run this installer after completing those steps if you want"
-    echo "    the rc.d service to start automatically."
-    echo ""
 else
-    echo "    vm-bhyve already configured — no changes made"
+    echo "    vm-bhyve already installed — configuration untouched"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3 — Python venv
+# Step 3 — Copy app to /usr/local/html-vm
 # ---------------------------------------------------------------------------
-echo "==> [3/6] Creating Python venv at ${VENV} ..."
+echo "==> [3/6] Installing app to ${APP_DIR} ..."
+
+mkdir -p "${APP_DIR}"
+
+# rsync if available, otherwise cp -R; exclude venv and cache
+if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+        --exclude='.venv' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='.git' \
+        --exclude='.secret_key' \
+        "${REPO_DIR}/" "${APP_DIR}/"
+else
+    # Portable fallback
+    find "${REPO_DIR}" \
+        -not -path '*/.git/*' \
+        -not -path '*/.venv/*' \
+        -not -path '*/__pycache__/*' \
+        -not -name '*.pyc' \
+        -not -name '.secret_key' | \
+    while IFS= read -r src; do
+        rel="${src#${REPO_DIR}/}"
+        dst="${APP_DIR}/${rel}"
+        if [ -d "${src}" ]; then
+            mkdir -p "${dst}"
+        else
+            cp -p "${src}" "${dst}"
+        fi
+    done
+fi
+
+echo "    app installed to ${APP_DIR}"
+
+# ---------------------------------------------------------------------------
+# Step 4 — Python venv
+# ---------------------------------------------------------------------------
+echo "==> [4/6] Creating Python venv ..."
 
 if [ ! -x "${VENV}/bin/python" ]; then
-    "${PYTHON}" -m venv "${VENV}"
-    echo "    venv created"
+    "${PYTHON}" -m venv --system-site-packages "${VENV}"
+    echo "    venv created (--system-site-packages)"
 else
-    echo "    venv already exists, skipping creation"
+    echo "    venv already exists"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4 — pip install from requirements.txt
+# Step 5 — pip install only what pkg cannot provide
 # ---------------------------------------------------------------------------
-echo "==> [4/6] Installing pip packages from requirements.txt ..."
+echo "==> [5/6] Installing pip-only packages from requirements.txt ..."
 
-# gevent is provided by pkg; install everything else via pip.
-# Pass --no-deps for gevent so pip does not try to rebuild it.
 "${VENV}/bin/pip" install --upgrade pip --quiet
 "${VENV}/bin/pip" install \
-    --requirement "${INSTALL_DIR}/requirements.txt" \
-    --ignore-requires-python \
-    --quiet \
-    2>&1 | grep -v "^WARNING.*gevent_websocket"
+    --requirement "${APP_DIR}/requirements.txt" \
+    --quiet
 
 echo "    pip packages OK"
-
-# ---------------------------------------------------------------------------
-# Step 5 — symlink pkg-managed geventwebsocket into the venv
-# ---------------------------------------------------------------------------
-echo "==> [5/6] Symlinking geventwebsocket and gevent into venv ..."
-
-VENV_SITE="${VENV}/lib/python3.12/site-packages"
-
-# geventwebsocket
-if [ ! -e "${VENV_SITE}/geventwebsocket" ]; then
-    ln -s "${SYS_SITE}/geventwebsocket" "${VENV_SITE}/geventwebsocket"
-    echo "    symlinked geventwebsocket"
-else
-    echo "    geventwebsocket already linked"
-fi
-
-# gevent egg-info (needed for pkg-installed gevent to be visible inside venv)
-GEVENT_EGG=$(ls -d "${SYS_SITE}"/gevent_websocket-*.egg-info 2>/dev/null | head -1)
-if [ -n "${GEVENT_EGG}" ]; then
-    DEST="${VENV_SITE}/$(basename "${GEVENT_EGG}")"
-    if [ ! -e "${DEST}" ]; then
-        ln -s "${GEVENT_EGG}" "${DEST}"
-        echo "    symlinked geventwebsocket egg-info"
-    fi
-fi
-
-# gevent itself (pkg version may be newer than pip; ensure venv sees pkg copy)
-if [ -d "${SYS_SITE}/gevent" ] && [ ! -L "${VENV_SITE}/gevent" ]; then
-    # Only re-link if the venv pip copy is a different path
-    VENV_GEVENT=$(readlink "${VENV_SITE}/gevent" 2>/dev/null || echo "")
-    if [ "${VENV_GEVENT}" != "${SYS_SITE}/gevent" ]; then
-        echo "    gevent already managed by pip in venv — leaving as-is"
-    fi
-fi
-
-echo "    symlinks OK"
 
 # ---------------------------------------------------------------------------
 # Step 6 — rc.d service
 # ---------------------------------------------------------------------------
 echo "==> [6/6] Installing rc.d service ..."
 
-# Update the default install dir in the service script to match this install
-sed "s|/home/nonesuch/html-vm|${INSTALL_DIR}|g" \
-    "${SERVICE_SRC}" > "${SERVICE_DST}"
+sed "s|/home/nonesuch/html-vm|${APP_DIR}|g" \
+    "${APP_DIR}/etc/rc.d/html_vm" > "${SERVICE_DST}"
 chmod 555 "${SERVICE_DST}"
 echo "    installed ${SERVICE_DST}"
 
-# Add html_vm_enable to /etc/rc.conf only if not already present
 if ! grep -q "html_vm_enable" "${RCCONF}" 2>/dev/null; then
     printf '\n# html-vm web admin\nhtml_vm_enable="YES"\nhtml_vm_dir="%s"\n' \
-        "${INSTALL_DIR}" >> "${RCCONF}"
+        "${APP_DIR}" >> "${RCCONF}"
     echo "    added html_vm_enable to ${RCCONF}"
 else
     echo "    html_vm_enable already in ${RCCONF} — not modified"
@@ -185,11 +184,11 @@ fi
 echo ""
 echo "==> Installation complete."
 echo ""
-echo "    Start now  : service html_vm start"
-echo "    Logs       : tail -f /var/log/html_vm.log"
-echo "    Web UI     : http://$(hostname):8088/"
+echo "    Start : service html_vm start"
+echo "    Logs  : tail -f /var/log/html_vm.log"
+echo "    UI    : http://$(hostname):8088/"
 echo ""
-if [ "${VMBHYVE_ALREADY}" -eq 0 ]; then
-    echo "    REMINDER: configure vm-bhyve (see step 2 above) before starting."
+if [ "${VMBHYVE_PREINSTALLED}" -eq 0 ]; then
+    echo "    REMINDER: complete vm-bhyve setup (step 2 above) before starting."
     echo ""
 fi

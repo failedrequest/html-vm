@@ -7,7 +7,7 @@
 # Add to /etc/rc.conf to enable:
 #
 #   html_vm_enable="YES"
-#   html_vm_dir="/home/nonesuch/html-vm"   # optional, defaults below
+#   html_vm_dir="/usr/local/html-vm"   # optional, defaults below
 #   html_vm_host="0.0.0.0:8088"            # optional
 #   html_vm_log="/var/log/html_vm.log"     # optional
 #
@@ -20,7 +20,7 @@ rcvar="html_vm_enable"
 load_rc_config "${name}"
 
 : ${html_vm_enable:="NO"}
-: ${html_vm_dir:="/home/nonesuch/html-vm"}
+: ${html_vm_dir:="/usr/local/html-vm"}
 : ${html_vm_host:="0.0.0.0:8088"}
 : ${html_vm_log:="/var/log/html_vm.log"}
 : ${html_vm_user:="root"}
