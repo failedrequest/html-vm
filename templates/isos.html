@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}ISO Images{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>ISO Images</h1>
+</div>
+
+{% if iso_error %}<div class="flash error">{{ iso_error }}</div>{% endif %}
+
+<p class="note">
+  ISOs are stored in the datastore <code>.iso/</code> directory.
+  Attach one to a new VM on the <a href="{{ url_for('vm_create') }}">Create VM</a> page.
+</p>
+
+<table class="data">
+  <thead>
+    <tr><th>Filename</th><th>Size</th><th>Del</th></tr>
+  </thead>
+  <tbody>
+    {% for iso in isos %}
+    <tr>
+      <td class="mono">{{ iso.name }}</td>
+      <td>{{ iso.size_human }}</td>
+      <td>
+        <form method="post" action="{{ url_for('iso_delete', filename=iso.name) }}" class="inline"
+              onsubmit="return confirm('Delete {{ iso.name }}?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="small danger">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="dim">No ISO images found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Upload ISO</h2>
+<div class="card">
+  <form method="post" action="{{ url_for('iso_upload') }}" enctype="multipart/form-data" id="upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label>ISO / IMG file <span class="hint">(max 8 GiB)</span></label>
+      <input type="file" name="iso_file" accept=".iso,.img" required id="iso-file-input">
+    </div>
+    <div id="upload-progress" style="display:none" class="upload-progress">
+      <div class="up-bar-wrap"><div class="up-bar" id="up-bar"></div></div>
+      <span id="up-label" class="note">0%</span>
+    </div>
+    <button type="submit" class="primary" id="upload-btn">Upload</button>
+    <p class="note">File must end in <code>.iso</code> or <code>.img</code>.</p>
+  </form>
+</div>
+
+<script>
+(function() {
+  var form  = document.getElementById('upload-form');
+  var inp   = document.getElementById('iso-file-input');
+  var prog  = document.getElementById('upload-progress');
+  var bar   = document.getElementById('up-bar');
+  var label = document.getElementById('up-label');
+  var btn   = document.getElementById('upload-btn');
+
+  form.addEventListener('submit', function(e) {
+    if (!inp.files.length) return;
+    e.preventDefault();
+    var fd = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', form.action);
+
+    xhr.upload.addEventListener('progress', function(ev) {
+      if (!ev.lengthComputable) return;
+      var pct = Math.round(ev.loaded / ev.total * 100);
+      bar.style.width = pct + '%';
+      label.textContent = pct + '% (' + fmtBytes(ev.loaded) + ' / ' + fmtBytes(ev.total) + ')';
+      prog.style.display = '';
+      btn.disabled = true;
+    });
+
+    xhr.addEventListener('load', function() {
+      // Server redirects on success; follow it
+      window.location.href = "{{ url_for('iso_list') }}";
+    });
+
+    xhr.addEventListener('error', function() {
+      label.textContent = 'Upload failed.';
+      btn.disabled = false;
+    });
+
+    xhr.send(fd);
+  });
+
+  function fmtBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KiB';
+    if (b < 1073741824) return (b/1048576).toFixed(1) + ' MiB';
+    return (b/1073741824).toFixed(2) + ' GiB';
+  }
+})();
+</script>
+{% endblock %}

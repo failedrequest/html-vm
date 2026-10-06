@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}VM {{ v.name }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>VM {{ v.name }}</h1>
+</div>
+
+<table class="kv">
+  <tr><th>State</th><td>{{ v.state }}</td></tr>
+  <tr><th>Loader</th><td>{{ v.loader }}</td></tr>
+  <tr><th>UUID</th><td class="mono">{{ v.uuid }}</td></tr>
+  <tr><th>CPU</th><td>{{ v.cpu }}</td></tr>
+  <tr><th>Memory</th><td>{{ v.memory }} ({{ '%.0f'|format(v.memory_bytes / 1024 / 1024) if v.memory_bytes else '-' }} MiB)</td></tr>
+  <tr><th>Datastore</th><td>{{ v.datastore }}</td></tr>
+  <tr><th>Memory resident</th><td>{{ v.memory_resident or '-' }}</td></tr>
+  <tr><th>Uptime</th><td>{{ v.uptime or '-' }} ({{ '%.1f'|format(v.uptime_seconds / 3600) if v.uptime_seconds else 0 }}h)</td></tr>
+  <tr><th>%CPU</th><td>{{ v.pcpu or '-' }}</td></tr>
+  <tr><th>RSS</th><td>{{ v.rss_human or '-' }}</td></tr>
+</table>
+
+{# ────────────────── Disks ────────────────── #}
+<h2>Disks</h2>
+<table class="data" id="disk-table">
+  <thead>
+    <tr><th>#</th><th>Device</th><th>Type</th><th>Size</th><th>Used</th><th>Path</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for d in v.disks %}
+  {% set idx = loop.index0 %}
+  {% set locked = (v.running and idx == 0) %}
+  <tr id="disk-row-{{ idx }}">
+    <td>{{ d.get('number', idx) }}</td>
+    <td>{{ d.get('device_type','-') }}</td>
+    <td>{{ d.get('emulation','-') }}</td>
+    <td>{{ d.get('size_human','-') }}</td>
+    <td>{{ d.get('used_human','-') }}</td>
+    <td class="mono">{{ d.get('system_path','-') }}</td>
+    <td style="white-space:nowrap">
+      {% if locked %}
+        <span class="dim" title="Cannot edit boot disk while VM is running" style="font-size:.8rem">🔒 running</span>
+      {% else %}
+        <button class="edit-btn" onclick="toggleDrawer('disk-drawer-{{ idx }}', this)">Edit</button>
+        <form method="post" action="{{ url_for('vm_disk_remove', name=v.name, idx=idx) }}" class="inline"
+              onsubmit="return confirm('Remove disk {{ idx }} from conf?\nBacking file is NOT deleted.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="danger small">Remove</button>
+        </form>
+      {% endif %}
+    </td>
+  </tr>
+  {# ── inline edit drawer for this disk row ── #}
+  {% if not locked %}
+  <tr class="row-drawer" id="disk-drawer-{{ idx }}">
+    <td colspan="7">
+      <p class="drawer-title">Edit disk {{ idx }}{% if d.get('system_path') %} — {{ d.get('system_path') }}{% endif %}</p>
+      <form method="post" action="{{ url_for('vm_disk_update', name=v.name, idx=idx) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="drawer-grid">
+          <div class="field"><label>Emulation type</label>
+            <select name="disk_type">
+              <option value="">(unchanged)</option>
+              {% for t in disk_types %}
+              <option value="{{ t }}" {{ 'selected' if t == d.get('emulation') else '' }}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {# path source: manual entry or ISO picker #}
+          <div class="field"><label>Path source</label>
+            <select id="disk-path-src-{{ idx }}" onchange="diskPathSrc({{ idx }})">
+              <option value="keep">Keep current path</option>
+              <option value="manual">Type a path</option>
+              {% if isos %}<option value="iso">Pick an ISO</option>{% endif %}
+            </select>
+          </div>
+
+          <div class="field" id="disk-manual-{{ idx }}" style="display:none"><label>Path / filename</label>
+            <input type="text" name="disk_name" id="disk_name_{{ idx }}"
+                   placeholder="{{ d.get('system_path', 'disk0.img') }}">
+          </div>
+
+          {% if isos %}
+          <div class="field" id="disk-iso-{{ idx }}" style="display:none"><label>ISO image</label>
+            <select id="disk-iso-sel-{{ idx }}" onchange="applyIso({{ idx }})">
+              <option value="">— select ISO —</option>
+              {% for iso in isos %}
+              <option value="{{ iso_dir }}/{{ iso }}">{{ iso }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+
+          <div class="field"><label>Dev</label>
+            <select name="dev" id="disk_dev_{{ idx }}">
+              <option value="">(unchanged)</option>
+              <option value="file" {{ 'selected' if d.get('dev') == 'file' else '' }}>file</option>
+              <option value="zvol" {{ 'selected' if d.get('dev') == 'zvol' else '' }}>zvol</option>
+              <option value="sparse-zvol" {{ 'selected' if d.get('dev') == 'sparse-zvol' else '' }}>sparse-zvol</option>
+              <option value="custom" {{ 'selected' if d.get('dev') == 'custom' else '' }}>custom (ISO / abs path)</option>
+            </select>
+          </div>
+        </div>
+        <div class="drawer-actions">
+          <button type="submit" class="primary small">Save changes</button>
+          <button type="button" class="small" onclick="toggleDrawer('disk-drawer-{{ idx }}', null)">Cancel</button>
+          <span class="note" style="margin:0">Changes apply after restart.</span>
+        </div>
+      </form>
+    </td>
+  </tr>
+  {% endif %}
+  {% else %}
+  <tr><td colspan="7" class="dim">No disks found in conf.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Add disk ── #}
+<div class="add-panel">
+  <p class="add-panel-title">Add a disk</p>
+  <form method="post" action="{{ url_for('vm_disk_add', name=v.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="drawer-grid">
+      <div class="field"><label>Emulation type</label>
+        <select name="disk_type">
+          {% for t in disk_types %}
+          <option value="{{ t }}" {{ 'selected' if t == 'virtio-blk' else '' }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Size (required)</label>
+        <input type="text" name="size" placeholder="e.g. 10G" required>
+      </div>
+      <div class="field"><label>Dev</label>
+        <select name="dev">
+          <option value="file">file (raw image)</option>
+          <option value="zvol">zvol</option>
+          <option value="sparse-zvol">sparse-zvol</option>
+        </select>
+      </div>
+    </div>
+    <p class="note">Creates the backing file and appends the conf entry. Applies after restart.</p>
+    <button type="submit" class="primary small">Add disk</button>
+  </form>
+</div>
+
+{# ────────────────── Networks ────────────────── #}
+<h2>Networks</h2>
+<table class="data" id="net-table">
+  <thead>
+    <tr><th>#</th><th>Type</th><th>Switch</th><th>MAC</th><th>RX</th><th>TX</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for n in v.networks %}
+  {% set idx = loop.index0 %}
+  <tr id="net-row-{{ idx }}">
+    <td>{{ n.get('number', idx) }}</td>
+    <td>{{ n.get('emulation','-') }}</td>
+    <td>{{ n.get('virtual_switch','-') }}</td>
+    <td class="mono">{{ n.get('fixed_mac_address','-') }}</td>
+    <td>{{ n.get('net_in_human','-') }}</td>
+    <td>{{ n.get('net_out_human','-') }}</td>
+    <td style="white-space:nowrap">
+      <button class="edit-btn" onclick="toggleDrawer('net-drawer-{{ idx }}', this)">Edit</button>
+      <form method="post" action="{{ url_for('vm_network_remove', name=v.name, idx=idx) }}" class="inline"
+            onsubmit="return confirm('Remove network {{ idx }} from conf?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="danger small">Remove</button>
+      </form>
+    </td>
+  </tr>
+  {# ── inline edit drawer for this network row ── #}
+  <tr class="row-drawer" id="net-drawer-{{ idx }}">
+    <td colspan="7">
+      <p class="drawer-title">Edit network {{ idx }} — {{ n.get('emulation','-') }} on {{ n.get('virtual_switch','-') }}</p>
+      <form method="post" action="{{ url_for('vm_network_update', name=v.name, idx=idx) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="drawer-grid">
+          <div class="field"><label>Switch</label>
+            <select name="switch">
+              <option value="">(unchanged)</option>
+              {% for s in switches %}
+              <option value="{{ s }}" {{ 'selected' if s == n.get('virtual_switch') else '' }}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>NIC type</label>
+            <select name="nic_type">
+              <option value="">(unchanged)</option>
+              {% for t in nic_types %}
+              <option value="{{ t }}" {{ 'selected' if t == n.get('emulation') else '' }}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>MAC address</label>
+            <input type="text" name="mac"
+                   value="{{ n.get('fixed_mac_address','') }}"
+                   placeholder="blank = keep current">
+          </div>
+        </div>
+        <div class="drawer-actions">
+          <button type="submit" class="primary small">Save changes</button>
+          <button type="button" class="small" onclick="toggleDrawer('net-drawer-{{ idx }}', null)">Cancel</button>
+          <span class="note" style="margin:0">Changes apply after restart.</span>
+        </div>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="dim">No network interfaces found in conf.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Add network ── #}
+<div class="add-panel">
+  <p class="add-panel-title">Add a network interface</p>
+  <form method="post" action="{{ url_for('vm_network_add', name=v.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="drawer-grid">
+      <div class="field"><label>Switch (required)</label>
+        <select name="switch" required>
+          {% for s in switches %}
+          <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>NIC type</label>
+        <select name="nic_type">
+          {% for t in nic_types %}
+          <option value="{{ t }}" {{ 'selected' if t == 'virtio-net' else '' }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <p class="note">Appends a new NIC to the conf. Applies after restart.</p>
+    <button type="submit" class="primary small">Add network interface</button>
+  </form>
+</div>
+
+{# ────────────────── Config ────────────────── #}
+<h2>Update configuration</h2>
+<form method="post" action="{{ url_for('vm_action', name=v.name, action='update') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="two-col">
+    <div class="field"><label>vCPUs</label>
+      <input type="number" name="cpu" value="{{ v.cpu }}" min="1" max="256">
+    </div>
+    <div class="field"><label>Memory</label>
+      <input type="text" name="memory" value="{{ v.memory }}" placeholder="e.g. 2G">
+    </div>
+    <div class="field"><label>Loader</label>
+      <select name="loader">
+        {% for l in loaders %}
+        <option value="{{ l }}" {{ 'selected' if l == v.loader else '' }}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>UTC time</label>
+      <select name="utctime">
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+    </div>
+  </div>
+  <p class="note">Changes apply after the VM is restarted.</p>
+  <button type="submit" class="primary">Update</button>
+</form>
+
+{# ────────────────── Lifecycle ────────────────── #}
+<h2>Power / lifecycle</h2>
+<div class="actions">
+  {% if not v.running %}
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='start') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="primary">Start</button>
+    </form>
+  {% else %}
+    <a href="{{ url_for('vm_console', name=v.name) }}" class="button primary">⌨ Serial Console</a>
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='stop') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="danger">Stop</button>
+    </form>
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='reboot') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button>Reboot</button>
+    </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='delete') }}" class="inline"
+        onsubmit="return confirm('Delete VM {{ v.name }}? Config and disks are removed.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Delete</button>
+  </form>
+</div>
+
+<h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
+<div class="actions">
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-poweroff') }}" class="inline"
+        onsubmit="return confirm('Force power-off {{ v.name }}? Guest will NOT be notified.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Force power-off</button>
+  </form>
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-reset') }}" class="inline"
+        onsubmit="return confirm('Force reset {{ v.name }}? Guest will NOT be notified.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Force reset</button>
+  </form>
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='destroy-vmm') }}" class="inline"
+        onsubmit="return confirm('Destroy VMM context for {{ v.name }}? Use only for orphaned/stuck VMs.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Destroy VMM context</button>
+  </form>
+</div>
+<p class="note">Use only when normal stop fails. Force ops call <code>bhyvectl</code> directly — no graceful shutdown.
+Destroy VMM context releases the kernel VMM device for an orphaned guest.</p>
+
+<p>
+  <a href="{{ url_for('storage') }}">📦 Snapshots &amp; Clone</a> ·
+  <a href="{{ url_for('vm_snapshots', name=v.name) }}">Snapshots for this VM</a>
+</p>
+
+<p><a href="{{ url_for('index') }}">&larr; back to dashboard</a></p>
+
+<script>
+/* Toggle a row-drawer open/closed. btn is the Edit button that triggered it
+   (pass null from Cancel to just close without toggling button state). */
+function toggleDrawer(drawerId, btn) {
+  var drawer = document.getElementById(drawerId);
+  var isOpen = drawer.classList.contains('open');
+
+  /* Close all other drawers + reset their buttons */
+  document.querySelectorAll('.row-drawer.open').forEach(function(el) {
+    if (el.id !== drawerId) {
+      el.classList.remove('open');
+      var prevBtn = document.querySelector('[onclick*="' + el.id + '"]');
+      if (prevBtn) prevBtn.classList.remove('active');
+    }
+  });
+
+  if (isOpen || btn === null) {
+    drawer.classList.remove('open');
+    if (btn) btn.classList.remove('active');
+  } else {
+    drawer.classList.add('open');
+    if (btn) btn.classList.add('active');
+  }
+}
+
+/* Switch between keep / manual / iso path modes for a disk drawer */
+function diskPathSrc(idx) {
+  var src = document.getElementById('disk-path-src-' + idx).value;
+  var manualDiv = document.getElementById('disk-manual-' + idx);
+  var isoDiv    = document.getElementById('disk-iso-' + idx);
+  var nameInput = document.getElementById('disk_name_' + idx);
+  var devSel    = document.getElementById('disk_dev_' + idx);
+
+  if (manualDiv) manualDiv.style.display = (src === 'manual') ? '' : 'none';
+  if (isoDiv)    isoDiv.style.display    = (src === 'iso')    ? '' : 'none';
+
+  if (src === 'keep') {
+    if (nameInput) nameInput.value = '';
+  }
+  if (src === 'iso') {
+    if (devSel) devSel.value = 'custom';
+  }
+  if (src === 'manual') {
+    if (devSel) devSel.value = '';
+  }
+}
+
+/* Copy the selected ISO path into the hidden disk_name input */
+function applyIso(idx) {
+  var sel       = document.getElementById('disk-iso-sel-' + idx);
+  var nameInput = document.getElementById('disk_name_' + idx);
+  var devSel    = document.getElementById('disk_dev_' + idx);
+  if (nameInput && sel) nameInput.value = sel.value;
+  if (devSel && sel.value) devSel.value = 'custom';
+}
+</script>
+{% endblock %}

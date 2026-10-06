@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# PROVIDE: html_vm
+# REQUIRE: LOGIN NETWORKING vm
+# KEYWORD: shutdown
+#
+# Add to /etc/rc.conf to enable:
+#
+#   html_vm_enable="YES"
+#   html_vm_dir="/home/nonesuch/html-vm"   # optional, defaults below
+#   html_vm_host="0.0.0.0:8088"            # optional
+#   html_vm_log="/var/log/html_vm.log"     # optional
+#
+
+. /etc/rc.subr
+
+name="html_vm"
+rcvar="html_vm_enable"
+
+load_rc_config "${name}"
+
+: ${html_vm_enable:="NO"}
+: ${html_vm_dir:="/home/nonesuch/html-vm"}
+: ${html_vm_host:="0.0.0.0:8088"}
+: ${html_vm_log:="/var/log/html_vm.log"}
+: ${html_vm_user:="root"}
+
+# The venv python that has Flask + gevent visible
+html_vm_python="${html_vm_dir}/.venv/bin/python"
+
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -o ${html_vm_log} \
+    ${html_vm_python} ${html_vm_dir}/run.py"
+
+export VM_HOST="${html_vm_host}"
+
+start_precmd="html_vm_precmd"
+
+html_vm_precmd()
+{
+    if [ ! -x "${html_vm_python}" ]; then
+        err 1 "Python not found at ${html_vm_python} — check html_vm_dir"
+    fi
+    touch "${html_vm_log}" && chown "${html_vm_user}" "${html_vm_log}"
+}
+
+run_rc_command "$1"

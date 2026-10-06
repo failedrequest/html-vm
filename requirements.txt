@@ -1,0 +1,5 @@
+Flask>=3.0
+python-pam>=1.0
+# WebSocket support — requires py312-gevent and py312-gevent-websocket from pkg:
+#   sudo pkg install -y py312-gevent py312-gevent-websocket
+# Then symlink into venv (see README / run.py)

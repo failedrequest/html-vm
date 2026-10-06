@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Storage — Snapshots &amp; Images{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Storage</h1>
+</div>
+<p class="sub">ZFS snapshots, clones, and portable images.
+Each VM needs its own ZFS dataset — use <strong>Create ZFS dataset</strong> below (or check the box when creating a VM)
+to enable snapshots, clones, and migration for that VM.</p>
+
+{# ── Per-VM snapshot links ── #}
+<h2>VM Datasets &amp; Snapshots</h2>
+<table class="data">
+  <thead><tr><th>VM</th><th>ZFS Dataset</th><th>Snapshots</th><th></th></tr></thead>
+  <tbody>
+  {% for name in vm_names %}
+  {% set has_ds = vm_zfs.get(name, false) %}
+  <tr>
+    <td>{{ name }}</td>
+    <td>
+      {% if has_ds %}
+        <span style="color:var(--ok);font-weight:600">✔ yes</span>
+      {% else %}
+        <span style="color:var(--muted)">✘ none</span>
+      {% endif %}
+    </td>
+    <td>
+      {% if has_ds %}
+        <a href="{{ url_for('vm_snapshots', name=name) }}">Manage →</a>
+      {% else %}
+        <span class="dim">—</span>
+      {% endif %}
+    </td>
+    <td>
+      {% if not has_ds %}
+        <form method="post" action="{{ url_for('vm_create_dataset', name=name) }}" class="inline"
+              onsubmit="return confirm('Create a ZFS dataset for {{ name }}?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="primary small">Create ZFS dataset</button>
+        </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="dim">No VMs found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Portable images ── #}
+<h2>Portable VM Images <span class="hint">(ZFS required)</span></h2>
+
+{% if img_err %}
+  <p class="flash error" style="border-radius:6px;padding:.5rem .8rem">{{ img_err }}</p>
+{% endif %}
+
+<table class="data">
+  <thead><tr><th>UUID</th><th>Name</th><th>Date</th><th>Size</th><th>Description</th><th></th></tr></thead>
+  <tbody>
+  {% for img in images %}
+  <tr>
+    <td class="mono" style="font-size:.8rem">{{ img.uuid }}</td>
+    <td>{{ img.name }}</td>
+    <td>{{ img.date }}</td>
+    <td>{{ img.size }}</td>
+    <td>{{ img.description }}</td>
+    <td style="white-space:nowrap">
+      <button class="edit-btn" onclick="togglePanel('prov-{{ loop.index0 }}', this)">Provision</button>
+      <form method="post" action="{{ url_for('image_delete', uuid=img.uuid) }}" class="inline"
+            onsubmit="return confirm('Delete image {{ img.uuid }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="danger small">Delete</button>
+      </form>
+    </td>
+  </tr>
+  <tr class="row-drawer" id="prov-{{ loop.index0 }}">
+    <td colspan="6">
+      <p class="drawer-title">Provision new VM from image {{ img.uuid }}</p>
+      <form method="post" action="{{ url_for('image_provision', uuid=img.uuid) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="drawer-grid">
+          <div class="field"><label>New VM name</label>
+            <input type="text" name="new_name" required placeholder="e.g. myvm-restored">
+          </div>
+        </div>
+        <div class="drawer-actions">
+          <button type="submit" class="primary small">Provision</button>
+          <button type="button" class="small" onclick="togglePanel('prov-{{ loop.index0 }}', null)">Cancel</button>
+        </div>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="dim">No images found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="add-panel">
+  <p class="add-panel-title">Create portable image from VM</p>
+  <form method="post" action="{{ url_for('image_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="drawer-grid">
+      <div class="field"><label>VM name</label>
+        <select name="name" required>
+          {% for n in vm_names %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Description (optional)</label>
+        <input type="text" name="description" placeholder="e.g. pre-upgrade snapshot">
+      </div>
+    </div>
+    <p class="note">Packages the VM dataset into a compressed portable image. VM must be stopped. May take several minutes.</p>
+    <button type="submit" class="primary small">Create image</button>
+  </form>
+</div>
+
+<script>
+function togglePanel(id, btn) {
+  var el = document.getElementById(id);
+  var open = el.classList.contains('open');
+  document.querySelectorAll('.row-drawer.open').forEach(function(e) {
+    e.classList.remove('open');
+    var b = document.querySelector('[onclick*="' + e.id + '"]');
+    if (b) b.classList.remove('active');
+  });
+  if (!open && btn !== null) {
+    el.classList.add('open');
+    if (btn) btn.classList.add('active');
+  }
+}
+</script>
+{% endblock %}

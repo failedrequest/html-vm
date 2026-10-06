@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Console — {{ v.name }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>⌨ Serial Console — {{ v.name }}</h1>
+  <div>
+    <a href="{{ url_for('vm_detail', name=v.name) }}" class="button small">← VM detail</a>
+  </div>
+</div>
+
+{% if entry %}
+{# ── gotty session is running ─────────────────────────────────────────── #}
+<div class="console-meta card">
+  <div class="two-col">
+    <div>
+      <span class="cap-label">Session</span>
+      <span class="cap-num stat ok">● Active</span>
+    </div>
+    <div>
+      <span class="cap-label">PID</span>
+      <span class="cap-num mono">{{ entry.pid }}</span>
+    </div>
+    <div>
+      <span class="cap-label">nmdm device</span>
+      <span class="cap-num mono">{{ entry.nmdm }}</span>
+    </div>
+    <div>
+      <span class="cap-label">Port</span>
+      <span class="cap-num mono">{{ entry.port }}</span>
+    </div>
+  </div>
+  <div class="actions" style="margin-top:.7rem">
+    <form method="post" action="{{ url_for('console_stop', name=v.name) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="small danger">Stop console</button>
+    </form>
+    <form method="post" action="{{ url_for('console_kill', name=v.name) }}" class="inline"
+          onsubmit="return confirm('Force-kill gotty PID {{ entry.pid }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="small danger">Force kill (stuck)</button>
+    </form>
+  </div>
+</div>
+
+<div id="console-wrap">
+  <iframe id="gotty-frame"
+          src="http://{{ request.host.split(':')[0] }}:{{ entry.port }}/"
+          allowfullscreen
+          title="Serial console for {{ v.name }}">
+  </iframe>
+</div>
+
+<script>
+(function() {
+  // Auto-reload the iframe if gotty hasn't started yet
+  var frame = document.getElementById('gotty-frame');
+  var attempts = 0;
+  var maxAttempts = 20;
+
+  function tryLoad() {
+    attempts++;
+    if (attempts > maxAttempts) return;
+    // Check if gotty is up by fetching its root
+    fetch('http://' + window.location.hostname + ':{{ entry.port }}/', {mode: 'no-cors'})
+      .then(function() {
+        frame.src = frame.src; // reload
+      })
+      .catch(function() {
+        setTimeout(tryLoad, 500);
+      });
+  }
+
+  frame.addEventListener('error', function() {
+    setTimeout(tryLoad, 500);
+  });
+})();
+</script>
+
+{% else %}
+{# ── no session yet ───────────────────────────────────────────────────── #}
+<div class="card">
+  <p>No active console session for <strong>{{ v.name }}</strong>.</p>
+  <p class="note">
+    Starting the console launches <code>gotty</code> + <code>cu</code> connected
+    to the VM's nmdm serial port.
+    The nmdm device is: <code>{{ v.nmdm_port or '/dev/nmdm-' + v.name + '.1B' }}</code>
+  </p>
+  <form method="post" action="{{ url_for('console_start', name=v.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="primary">▶ Start console</button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

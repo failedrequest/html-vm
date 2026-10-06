@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Create VM{% endblock %}
+{% block content %}
+<h1>Create VM</h1>
+<div class="card">
+  <form method="post" action="{{ url_for('vm_create') }}" id="create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {# ── OS Profile quick-fill ──────────────────────────────────────── #}
+    <div class="field">
+      <label>OS Profile <span class="hint">(pre-fills fields below)</span></label>
+      <div class="profile-grid">
+        {% for key, p in os_profiles.items() %}
+        <label class="profile-card">
+          <input type="radio" name="_profile" value="{{ key }}"
+                 {{ 'checked' if key == 'freebsd' else '' }}>
+          <span>{{ p.label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <hr class="sect">
+
+    {# ── Basic settings ─────────────────────────────────────────────── #}
+    <div class="two-col">
+      <div class="field">
+        <label>VM Name</label>
+        <input type="text" name="name" required placeholder="e.g. www01"
+               pattern="[a-z0-9][a-z0-9._-]*[a-z0-9]">
+      </div>
+      <div class="field">
+        <label>vCPUs</label>
+        <input type="number" name="cpu" value="2" min="1" max="256" required>
+      </div>
+      <div class="field">
+        <label>Memory</label>
+        <input type="text" name="memory" value="2G" required placeholder="e.g. 2G, 1024M">
+      </div>
+      <div class="field">
+        <label>Disk size</label>
+        <input type="text" name="size" value="20G" required placeholder="e.g. 20G">
+      </div>
+    </div>
+
+    <hr class="sect">
+
+    {# ── Boot / firmware ────────────────────────────────────────────── #}
+    <h3 class="sect-hdr">Boot &amp; Firmware</h3>
+    <div class="two-col">
+      <div class="field">
+        <label>Loader</label>
+        <select name="loader" id="sel-loader">
+          {% for l in loaders %}
+          <option value="{{ l }}" {{ 'selected' if l == 'bhyveload' else '' }}>{{ l }}</option>
+          {% endfor %}
+        </select>
+        <p class="note">bhyveload=FreeBSD · uefi=Linux/Windows/OpenBSD (UEFI firmware)</p>
+      </div>
+      <div class="field">
+        <label>UTC time</label>
+        <select name="utctime">
+          <option value="yes" selected>Yes (Linux / FreeBSD)</option>
+          <option value="no">No (Windows uses localtime)</option>
+        </select>
+      </div>
+    </div>
+
+    <hr class="sect">
+
+    {# ── Devices ────────────────────────────────────────────────────── #}
+    <h3 class="sect-hdr">Devices</h3>
+    <div class="two-col">
+      <div class="field">
+        <label>Disk type</label>
+        <select name="disk_type" id="sel-disk">
+          {% for t in disk_types %}
+          <option value="{{ t }}" {{ 'selected' if t == 'virtio-blk' else '' }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>NIC type</label>
+        <select name="nic_type" id="sel-nic">
+          {% for t in nic_types %}
+          <option value="{{ t }}" {{ 'selected' if t == 'virtio-net' else '' }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Network switch</label>
+        <select name="switch">
+          {% for s in switches %}
+          <option value="{{ s }}" {{ 'selected' if s == 'default' else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="sect">
+
+    {# ── ZFS dataset ────────────────────────────────────────────────── #}
+    <h3 class="sect-hdr">Storage</h3>
+    <label class="check">
+      <input type="checkbox" name="zfs_dataset" value="1" id="chk-zfs">
+      Create a ZFS dataset for this VM
+      <span class="hint">— enables snapshots, clone, and migration</span>
+    </label>
+    <p class="note" id="zfs-note" style="display:none">
+      A dataset will be created at <strong id="zfs-ds-preview"></strong>
+      before provisioning.  Requires ZFS to be available for the VM datastore.
+    </p>
+
+    <hr class="sect">
+
+    {# ── ISO ────────────────────────────────────────────────────────── #}
+    <h3 class="sect-hdr">Install media (ISO)</h3>
+    <div class="field">
+      <label>Attach ISO as boot CD-ROM</label>
+      <select name="iso">
+        <option value="">— none —</option>
+        {% for iso in isos %}
+        <option value="{{ iso }}">{{ iso }}</option>
+        {% endfor %}
+      </select>
+      <p class="note">
+        Upload ISOs on the <a href="{{ url_for('iso_list') }}">ISO management</a> page first.
+        The ISO is attached as disk1 (ahci-cd); remove the entry from the conf after install.
+      </p>
+    </div>
+
+    <button type="submit" class="primary">Create VM</button>
+    <a href="{{ url_for('index') }}" class="button">Cancel</a>
+  </form>
+</div>
+
+<script>
+/* OS profile quick-fill */
+var PROFILES = {{ os_profiles | tojson }};
+
+document.querySelectorAll('input[name="_profile"]').forEach(function(radio) {
+  radio.addEventListener('change', function() {
+    var p = PROFILES[this.value];
+    if (!p) return;
+    _set('sel-loader', p.loader);
+    _set('sel-disk',   p.disk_type);
+    _set('sel-nic',    p.nic_type);
+    var utc = document.querySelector('select[name="utctime"]');
+    if (utc) utc.value = p.utctime || 'yes';
+  });
+});
+
+function _set(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+/* ZFS dataset preview */
+var chkZfs  = document.getElementById('chk-zfs');
+var zfsNote = document.getElementById('zfs-note');
+var zfsPrev = document.getElementById('zfs-ds-preview');
+var nameInp = document.querySelector('input[name="name"]');
+
+function updateZfsPreview() {
+  if (!chkZfs.checked) { zfsNote.style.display = 'none'; return; }
+  var n = (nameInp ? nameInp.value.trim() : '') || '<vmname>';
+  if (zfsPrev) zfsPrev.textContent = '<pool>/var/vm/' + n;
+  zfsNote.style.display = '';
+}
+if (chkZfs)  chkZfs.addEventListener('change', updateZfsPreview);
+if (nameInp) nameInp.addEventListener('input',  updateZfsPreview);
+</script>
+{% endblock %}

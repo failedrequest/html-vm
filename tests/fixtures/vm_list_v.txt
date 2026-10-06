@@ -1,0 +1,3 @@
+NAME     DATASTORE  LOADER     CPU  MEMORY  VNC  AUTO   %CPU       RSZ          UPTIME  STATE
+testvm1  default    bhyveload  2    1024M   -    No        -         -               -  Stopped
+testvm2  default    bhyveload  4    2G      -    No        -         -               -  Stopped

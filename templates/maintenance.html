@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Maintenance{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Maintenance</h1>
+</div>
+
+<h2>Host reboot</h2>
+<div class="card" style="max-width:520px">
+  <p>Schedules an OS-level reboot of this host in <strong>1 minute</strong> via
+     <code>shutdown -r +1</code>. All running VMs will be stopped by bhyve when
+     the host goes down.</p>
+  <p class="note">This action cannot be undone once confirmed. You will lose UI
+     access until the host comes back up.</p>
+  <form method="post" action="{{ url_for('maintenance_reboot') }}"
+        onsubmit="return confirm('Reboot this host? All running VMs will stop.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="danger">Reboot host now</button>
+  </form>
+</div>
+{% endblock %}

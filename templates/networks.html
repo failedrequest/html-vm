@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}Networks{% endblock %}
+{% block content %}
+<h1>Networks</h1>
+
+{# ── vm-bhyve switches ─────────────────────────────────────────────────── #}
+<h2>vm-bhyve switches</h2>
+<p class="note">Bridges that VM tap interfaces attach to.</p>
+
+<table class="data">
+  <tr><th>Name</th><th>Type</th><th>Interface</th><th>Address</th><th>Private</th><th>MTU</th><th>VLAN/VNI</th><th>Ports</th><th></th></tr>
+  {% for s in switches %}
+  <tr>
+    <td class="mono">{{ s.name }}</td><td>{{ s.type or '-' }}</td><td>{{ s.iface or '-' }}</td>
+    <td>{{ s.address or '-' }}</td><td>{{ s.private or '-' }}</td><td>{{ s.mtu or '-' }}</td>
+    <td>{{ s.vlan or '-' }}</td><td>{{ s.ports|join(', ') or '-' }}</td>
+    <td>
+      <form method="post" action="{{ url_for('network_delete', name=s.name) }}" class="inline"
+            onsubmit="return confirm('Remove switch {{ s.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="name" value="{{ s.name }}">
+        <button type="submit" class="small danger">delete</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" class="dim">No switches defined.</td></tr>
+  {% endfor %}
+</table>
+
+<h3 class="sect-hdr">Create standard switch</h3>
+<div class="card">
+  <form method="post" action="{{ url_for('networks') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field"><label>Name</label>
+      <input type="text" name="name" required pattern="[a-z0-9][a-z0-9._-]*[a-z0-9]"
+             placeholder="e.g. public">
+    </div>
+    <label class="check"><input type="checkbox" name="private" value="1"> Private (no NAT)</label>
+    <button type="submit" class="primary">Create switch</button>
+  </form>
+</div>
+
+{# ── VXLAN overlay switches ────────────────────────────────────────────── #}
+<hr class="sect">
+<h2>VXLAN overlay switches</h2>
+<p class="note">
+  VM-to-VM overlay via UDP/4789. vm-bhyve manages the bridge and vxlanN interface.
+  VMs on any participating host sharing the same VNI get Layer 2 connectivity.
+</p>
+
+{% set vxlan_switches = switches | selectattr('type', 'equalto', 'vxlan') | list %}
+<table class="data">
+  <tr><th>Switch name</th><th>VNI</th><th>Uplink</th><th>Bridge</th><th>Status</th></tr>
+  {% for s in vxlan_switches %}
+  <tr>
+    <td class="mono">{{ s.name }}</td>
+    <td>{{ s.vlan or '-' }}</td>
+    <td class="mono">{{ s.ports|join(', ') or '-' }}</td>
+    <td class="mono">{{ s.iface or '-' }}</td>
+    <td>
+      {% for vx in tunnels.vxlan %}
+        {% if vx.name == 'vxlan' ~ s.vlan %}
+          <span class="{{ 'ok' if vx.status == 'up' else 'dim' }}">{{ vx.status }}</span>
+        {% endif %}
+      {% endfor %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="dim">No VXLAN switches defined.</td></tr>
+  {% endfor %}
+</table>
+
+<h3 class="sect-hdr">Create VXLAN switch</h3>
+<div class="card">
+  <form method="post" action="{{ url_for('vxlan_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two-col">
+      <div class="field">
+        <label>Switch name <span class="hint">(becomes vm-&lt;name&gt; bridge)</span></label>
+        <input type="text" name="name" required pattern="[a-z0-9][a-z0-9._-]*[a-z0-9]"
+               placeholder="e.g. overlay0">
+      </div>
+      <div class="field">
+        <label>VNI <span class="hint">(1 – 16 777 215, same on all hosts)</span></label>
+        <input type="number" name="vni" required min="1" max="16777215" placeholder="100">
+      </div>
+      <div class="field">
+        <label>Physical uplink <span class="hint">(carries VXLAN UDP traffic)</span></label>
+        <select name="iface">
+          {% for i in host_ifaces %}<option value="{{ i }}">{{ i }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <p class="note">
+      Multicast mode: each VNI gets an auto-derived multicast group (239.x.x.x).
+      All hosts must be able to reach the same multicast group on UDP 4789.
+    </p>
+    <button type="submit" class="primary">Create VXLAN switch</button>
+  </form>
+</div>
+
+{# ── VXLAN unicast tunnels ────────────────────────────────────────────── #}
+<hr class="sect">
+<h2>VXLAN unicast tunnels</h2>
+<p class="note">
+  Point-to-point VXLAN (RFC 7348) to a specific remote host — firewall, router,
+  or another hypervisor. No multicast needed. The interface can be added to any
+  bridge to extend L2 connectivity across the tunnel.
+</p>
+
+{% set vxlan_unicast = tunnels.vxlan | selectattr('mode', 'equalto', 'unicast') | list %}
+<table class="data">
+  <tr><th>Interface</th><th>VNI</th><th>Local</th><th>Remote</th><th>Port</th><th>Status</th><th></th></tr>
+  {% for vx in vxlan_unicast %}
+  <tr>
+    <td class="mono">{{ vx.name }}</td>
+    <td>{{ vx.vxlanid or '-' }}</td>
+    <td class="mono">{{ vx.vxlanlocal or '-' }}</td>
+    <td class="mono">{{ vx.vxlanremote or '-' }}</td>
+    <td>4789</td>
+    <td><span class="{{ 'ok' if vx.status == 'up' else 'dim' }}">{{ vx.status }}</span></td>
+    <td>
+      <form method="post" action="{{ url_for('vxlan_tunnel_delete', name=vx.name) }}" class="inline"
+            onsubmit="return confirm('Destroy VXLAN tunnel {{ vx.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="small danger">destroy</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="dim">No unicast VXLAN tunnels active.</td></tr>
+  {% endfor %}
+</table>
+
+<h3 class="sect-hdr">Create VXLAN unicast tunnel</h3>
+<div class="card">
+  <form method="post" action="{{ url_for('vxlan_tunnel_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two-col">
+      <div class="field">
+        <label>Interface name <span class="hint">(must be vxlanN)</span></label>
+        <input type="text" name="name" required placeholder="vxlan10" pattern="vxlan\d+">
+      </div>
+      <div class="field">
+        <label>VNI <span class="hint">(must match remote end)</span></label>
+        <input type="number" name="vni" required min="1" max="16777215" placeholder="200">
+      </div>
+      <div class="field">
+        <label>Local outer IP <span class="hint">(this host's IP reachable from remote)</span></label>
+        <input type="text" name="local_ip" required placeholder="192.168.1.85">
+      </div>
+      <div class="field">
+        <label>Remote outer IP <span class="hint">(firewall / router / remote host)</span></label>
+        <input type="text" name="remote_ip" required placeholder="203.0.113.1">
+      </div>
+      <div class="field">
+        <label>UDP port <span class="hint">(default 4789, must match remote)</span></label>
+        <input type="number" name="port" value="4789" min="1" max="65535">
+      </div>
+    </div>
+    <p class="note">
+      After creation: optionally assign an inner IP via the Bridge membership section,
+      or add directly to a vm-bhyve switch so VMs can reach the remote network.
+    </p>
+    <button type="submit" class="primary">Create VXLAN tunnel</button>
+  </form>
+</div>
+
+{# ── GRE tunnels ───────────────────────────────────────────────────────── #}
+<hr class="sect">
+<h2>GRE tunnels</h2>
+<p class="note">
+  Point-to-point IP-in-IP tunnels (RFC 2784). Add to a bridge to give VMs
+  access to the remote network.
+</p>
+
+<table class="data">
+  <tr><th>Interface</th><th>Outer src</th><th>Outer dst</th><th>Inner addr</th><th>Status</th><th></th></tr>
+  {% for g in tunnels.gre %}
+  <tr>
+    <td class="mono">{{ g.name }}</td>
+    <td class="mono">{{ g.tunnel_src or '-' }}</td>
+    <td class="mono">{{ g.tunnel_dst or '-' }}</td>
+    <td class="mono">{{ g.inet or '-' }}</td>
+    <td><span class="{{ 'ok' if g.status == 'up' else 'dim' }}">{{ g.status }}</span></td>
+    <td>
+      <form method="post" action="{{ url_for('gre_delete', name=g.name) }}" class="inline"
+            onsubmit="return confirm('Destroy GRE tunnel {{ g.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="small danger">destroy</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="dim">No GRE tunnels active.</td></tr>
+  {% endfor %}
+</table>
+
+<h3 class="sect-hdr">Create GRE tunnel</h3>
+<div class="card">
+  <form method="post" action="{{ url_for('gre_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two-col">
+      <div class="field">
+        <label>Interface name</label>
+        <input type="text" name="name" required placeholder="gre0" pattern="gre\d+">
+      </div>
+      <div class="field">
+        <label>Local outer IP <span class="hint">(must be on this host)</span></label>
+        <input type="text" name="local_ip" required placeholder="192.168.1.85">
+      </div>
+      <div class="field">
+        <label>Remote outer IP</label>
+        <input type="text" name="remote_ip" required placeholder="192.168.1.2">
+      </div>
+      <div class="field">
+        <label>Inner local IP/prefix</label>
+        <input type="text" name="inner_local" required placeholder="10.99.0.1/30">
+      </div>
+      <div class="field">
+        <label>Inner remote IP</label>
+        <input type="text" name="inner_remote" required placeholder="10.99.0.2">
+      </div>
+    </div>
+    <button type="submit" class="primary">Create GRE tunnel</button>
+  </form>
+</div>
+
+{# ── IPsec tunnels ─────────────────────────────────────────────────────── #}
+<hr class="sect">
+<h2>IPsec tunnels</h2>
+<p class="note">
+  Route-based IPsec VTI (<code>if_ipsec</code>). Creates the interface and tunnel endpoints.
+  Security Associations must be loaded separately with <code>setkey(8)</code> or strongSwan.
+</p>
+
+<table class="data">
+  <tr><th>Interface</th><th>Outer src</th><th>Outer dst</th><th>Inner addr</th><th>Status</th><th></th></tr>
+  {% for ip in tunnels.ipsec %}
+  <tr>
+    <td class="mono">{{ ip.name }}</td>
+    <td class="mono">{{ ip.tunnel_src or '-' }}</td>
+    <td class="mono">{{ ip.tunnel_dst or '-' }}</td>
+    <td class="mono">{{ ip.inet or '-' }}</td>
+    <td><span class="{{ 'ok' if ip.status == 'up' else 'dim' }}">{{ ip.status }}</span></td>
+    <td>
+      <form method="post" action="{{ url_for('ipsec_delete', name=ip.name) }}" class="inline"
+            onsubmit="return confirm('Destroy IPsec tunnel {{ ip.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="small danger">destroy</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="dim">No IPsec tunnels active.</td></tr>
+  {% endfor %}
+</table>
+
+<h3 class="sect-hdr">Create IPsec tunnel</h3>
+<div class="card">
+  <form method="post" action="{{ url_for('ipsec_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two-col">
+      <div class="field">
+        <label>Interface name</label>
+        <input type="text" name="name" required placeholder="ipsec0" pattern="ipsec\d+">
+      </div>
+      <div class="field">
+        <label>Local outer IP</label>
+        <input type="text" name="local_ip" required placeholder="192.168.1.85">
+      </div>
+      <div class="field">
+        <label>Remote outer IP</label>
+        <input type="text" name="remote_ip" required placeholder="192.168.1.2">
+      </div>
+      <div class="field">
+        <label>Inner local IP/prefix</label>
+        <input type="text" name="inner_local" required placeholder="172.16.0.1/30">
+      </div>
+      <div class="field">
+        <label>Inner remote IP</label>
+        <input type="text" name="inner_remote" required placeholder="172.16.0.2">
+      </div>
+      <div class="field">
+        <label>ReqID <span class="hint">(optional, auto-assigned if blank)</span></label>
+        <input type="number" name="reqid" placeholder="auto" min="1">
+      </div>
+    </div>
+    <p class="note">
+      ⚠ After creating the interface, load Security Associations via
+      <code>setkey(8)</code> or an IKE daemon (strongSwan) before traffic will pass.
+    </p>
+    <button type="submit" class="primary">Create IPsec tunnel</button>
+  </form>
+</div>
+
+{# ── Bridge member management ──────────────────────────────────────────── #}
+<hr class="sect">
+<h2>Bridge membership</h2>
+<p class="note">Add or remove a tunnel interface from a vm-bhyve bridge.</p>
+
+<div class="card">
+  <div class="two-col">
+    <div>
+      <h3 class="sect-hdr">Add member</h3>
+      <form method="post" action="{{ url_for('bridge_addm', bridge='vm-default') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field">
+          <label>Bridge</label>
+          <select name="bridge" form="addm-form" style="display:none">
+            {% for s in switches %}<option>{{ s.iface }}</option>{% endfor %}
+          </select>
+          <input type="text" name="_bridge_display" id="addm-bridge" value="vm-default"
+                 placeholder="vm-default" list="bridge-list">
+          <datalist id="bridge-list">
+            {% for s in switches %}<option value="{{ s.iface }}"></option>{% endfor %}
+          </datalist>
+        </div>
+        <div class="field">
+          <label>Interface to add</label>
+          <input type="text" name="iface" required placeholder="gre0" list="tunnel-list">
+          <datalist id="tunnel-list">
+            {% for g in tunnels.gre %}<option value="{{ g.name }}"></option>{% endfor %}
+            {% for ip in tunnels.ipsec %}<option value="{{ ip.name }}"></option>{% endfor %}
+          </datalist>
+        </div>
+        <button type="submit" class="primary small">Add member</button>
+      </form>
+    </div>
+    <div>
+      <h3 class="sect-hdr">Remove member</h3>
+      <form method="post" action="{{ url_for('bridge_deletem', bridge='vm-default') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field">
+          <label>Bridge</label>
+          <input type="text" name="_bridge_display" value="vm-default"
+                 placeholder="vm-default" list="bridge-list">
+        </div>
+        <div class="field">
+          <label>Interface to remove</label>
+          <input type="text" name="iface" required placeholder="gre0" list="tunnel-list">
+        </div>
+        <button type="submit" class="danger small">Remove member</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Wire the bridge display inputs to the form action URLs
+(function() {
+  document.querySelectorAll("form[action*='/addm'], form[action*='/deletem']").forEach(function(form) {
+    var inp = form.querySelector("input[name='_bridge_display']");
+    if (!inp) return;
+    function update() {
+      var base = form.action.replace(/\/[^\/]+\/(addm|deletem)$/, '');
+      var verb = form.action.match(/(addm|deletem)$/)[1];
+      form.action = base + '/' + (inp.value.trim() || 'vm-default') + '/' + verb;
+    }
+    inp.addEventListener("change", update);
+    inp.addEventListener("input", update);
+  });
+})();
+</script>
+
+{% endblock %}

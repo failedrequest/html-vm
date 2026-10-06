@@ -1,0 +1,52 @@
+[project]
+name = "html-vm"
+version = "0.1.0"
+description = "Flask web admin for vm-bhyve on FreeBSD"
+authors = [
+    {name = "nonesuch"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "Flask>=3.0",
+    "python-pam>=1.0",
+    # gevent + geventwebsocket must be installed via pkg on FreeBSD:
+    #   sudo pkg install -y py312-gevent py312-gevent-websocket
+    # They are NOT pip-installable on this system; list here for documentation only.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyflakes>=3.0",
+]
+
+[project.scripts]
+html-vm = "run:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# ---------------------------------------------------------------------------
+# Tool configuration
+# ---------------------------------------------------------------------------
+
+[tool.pyflakes]
+# No options — pyflakes takes no config; invoked as: .venv/bin/python -m pyflakes
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+# ---------------------------------------------------------------------------
+# poetry (lock / venv management)
+# ---------------------------------------------------------------------------
+# Because gevent is a system pkg (not pip-installable), use:
+#
+#   poetry config virtualenvs.create false    # to reuse the existing .venv, or
+#   poetry env use /home/nonesuch/html-vm/.venv/bin/python
+#
+# Then:
+#   poetry install --only-root               # installs Flask + python-pam only
+#
+# gevent symlinks into .venv are managed separately (see STATUS.md).

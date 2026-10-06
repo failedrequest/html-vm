@@ -1,0 +1,52 @@
+------------------------
+Virtual Machine: testvm1
+------------------------
+  state: stopped
+  datastore: default
+  loader: bhyveload
+  uuid: 3f97381e-55de-47db-b11b-ee1b0b28f86c
+  cpu: 2
+  memory: 1024M
+
+  network-interface
+    number: 0
+    emulation: virtio-net
+    virtual-switch: public
+    fixed-mac-address: 58:9c:fc:08:45:a8
+    fixed-device: -
+
+  virtual-disk
+    number: 0
+    device-type: file
+    emulation: virtio-blk
+    options: -
+    system-path: /var/vm/testvm1/disk0.img
+    bytes-size: 2147483648 (2.000G)
+    bytes-used: 1024 (1.000K)
+
+------------------------
+Virtual Machine: testvm2
+------------------------
+  state: stopped
+  datastore: default
+  loader: bhyveload
+  uuid: 0e6dce12-5b95-469c-98f7-33a41b88b173
+  cpu: 4
+  memory: 2G
+
+  network-interface
+    number: 0
+    emulation: virtio-net
+    virtual-switch: public
+    fixed-mac-address: 58:9c:fc:00:d0:81
+    fixed-device: -
+
+  virtual-disk
+    number: 0
+    device-type: file
+    emulation: virtio-blk
+    options: -
+    system-path: /var/vm/testvm2/disk0.img
+    bytes-size: 5368709120 (5.000G)
+    bytes-used: 1024 (1.000K)
+

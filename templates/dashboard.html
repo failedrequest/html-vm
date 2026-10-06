@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Virtual Machines</h1>
+  <a href="{{ url_for('vm_create') }}" class="button">Create VM</a>
+</div>
+
+{% if vm_error %}<div class="flash error">{{ vm_error }}</div>{% endif %}
+
+<p class="sub" id="vm-sub">{{ running }} of {{ vms|length }} VM(s) running.</p>
+
+{# ── Host resource bars ─────────────────────────────────────────────── #}
+<div class="host-caps">
+  <div class="cap-grid">
+
+    <div class="cap-item">
+      <div class="cap-label">vCPUs allocated</div>
+      <div class="cap-bar-wrap">
+        {% set cpu_pct = ((agg.cpu_allocated / host.cpu_count * 100) | int) if host.cpu_count else 0 %}
+        <div class="cap-bar"><div class="cap-fill {% if cpu_pct > 90 %}danger{% elif cpu_pct > 70 %}warn{% endif %}"
+             style="width:{{ [cpu_pct,100]|min }}%"></div></div>
+      </div>
+      <div class="cap-num">{{ agg.cpu_allocated }} / {{ host.cpu_count or '?' }} cores ({{ cpu_pct }}%)</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">Memory allocated</div>
+      <div class="cap-bar-wrap">
+        {% set mem_pct = ((agg.mem_allocated_bytes / host.mem_total_bytes * 100) | int) if host.mem_total_bytes else 0 %}
+        <div class="cap-bar"><div class="cap-fill {% if mem_pct > 90 %}danger{% elif mem_pct > 70 %}warn{% endif %}"
+             style="width:{{ [mem_pct,100]|min }}%"></div></div>
+      </div>
+      <div class="cap-num">{{ agg.mem_allocated_human }} / {{ host.mem_total_human or '?' }}</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">Datastore used</div>
+      <div class="cap-bar-wrap">
+        {% set ds_pct = ((host.datastore_used_bytes / host.datastore_total_bytes * 100) | int) if host.datastore_total_bytes else 0 %}
+        <div class="cap-bar"><div class="cap-fill {% if ds_pct > 90 %}danger{% elif ds_pct > 70 %}warn{% endif %}"
+             style="width:{{ [ds_pct,100]|min }}%"></div></div>
+      </div>
+      <div class="cap-num">{{ host.datastore_used_human or '-' }} / {{ host.datastore_total_human or '-' }}</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">VM disk used (actual)</div>
+      <div class="cap-num stat">{{ agg.disk_used_human }}</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">Network in / out</div>
+      <div class="cap-num stat">↓ {{ agg.net_in_human }} &nbsp; ↑ {{ agg.net_out_human }}</div>
+    </div>
+
+  </div>
+</div>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>Name</th><th>State</th><th>CPU</th><th>Memory</th>
+      <th>Disk</th><th>Uptime</th><th>Net RX</th><th>Net TX</th><th>Console</th><th class="right">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in vms %}
+    {% set d = v.disks[0] if v.disks else {} %}
+    {% set n = v.networks[0] if v.networks else {} %}
+    <tr class="{{ 'on' if v.running else '' }}" data-vm="{{ v.name }}">
+      <td class="mono"><a href="{{ url_for('vm_detail', name=v.name) }}">{{ v.name }}</a></td>
+      <td>{{ v.state }}</td>
+      <td>{{ v.cpu }}</td>
+      <td>{{ v.memory }}</td>
+      <td>{{ d.get('size_human', '-') }}</td>
+      <td>{{ v.uptime or '-' }}</td>
+      <td>{{ n.get('net_in_human', '-') }}</td>
+      <td>{{ n.get('net_out_human', '-') }}</td>
+      <td><span class="dim">-</span></td>
+      <td class="right">
+        {% if v.running %}
+          <form method="post" action="{{ url_for('vm_action', name=v.name, action='stop') }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" title="stop" class="small danger">stop</button>
+          </form>
+          <form method="post" action="{{ url_for('vm_action', name=v.name, action='reboot') }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" title="reboot" class="small">reboot</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('vm_action', name=v.name, action='start') }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" title="start" class="small">start</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('vm_action', name=v.name, action='delete') }}" class="inline"
+              onsubmit="return confirm('Delete VM {{ v.name }}? This removes its config and disks.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" title="delete" class="small danger">delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script>
+(function () {
+  var INTERVAL = 10000;
+
+  function updateTable(vms, agg) {
+    var tbody = document.querySelector("table.data tbody");
+    if (!tbody) return;
+    var rows = {};
+    Array.prototype.forEach.call(tbody.querySelectorAll("tr[data-vm]"), function (tr) {
+      rows[tr.dataset.vm] = tr;
+    });
+    vms.forEach(function (v) {
+      var tr = rows[v.name];
+      if (!tr) return;
+      tr.className = v.running ? "on" : "";
+      var cells = tr.querySelectorAll("td");
+      if (cells.length < 9) return;
+      cells[1].textContent = v.state || "-";
+      cells[2].textContent = v.cpu  || "-";
+      cells[3].textContent = v.memory || "-";
+      var d = (v.disks && v.disks[0]) ? v.disks[0] : {};
+      var n = (v.networks && v.networks[0]) ? v.networks[0] : {};
+      cells[4].textContent = d.size_human  || "-";
+      cells[5].textContent = v.uptime      || "-";
+      cells[6].textContent = n.net_in_human  || "-";
+      cells[7].textContent = n.net_out_human || "-";
+    });
+    var running = vms.filter(function (v) { return v.running; }).length;
+    var sub = document.getElementById("vm-sub");
+    if (sub) sub.textContent = running + " of " + vms.length + " VM(s) running.";
+    if (agg) updateAgg(agg);
+  }
+
+  function updateAgg(agg) {
+    var el = document.getElementById("net-stat");
+    if (el) el.textContent = "\u2193 " + (agg.net_in_human||"-") + "   \u2191 " + (agg.net_out_human||"-");
+    var el2 = document.getElementById("disk-stat");
+    if (el2) el2.textContent = agg.disk_used_human || "-";
+  }
+
+  function poll() {
+    fetch("{{ url_for('api_vms') }}", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data && data.vms) updateTable(data.vms, data.agg); })
+      .catch(function () {});
+  }
+
+  setInterval(poll, INTERVAL);
+})();
+</script>
+{% endblock %}

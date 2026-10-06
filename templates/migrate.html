@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Migrate VM{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Migrate VM</h1>
+</div>
+<p class="sub">Transfer a VM to another host using <code>vm migrate</code>.
+Requires ZFS and SSH key-based auth to the destination host.
+The VM will be stopped briefly at the end of the transfer for the final incremental snapshot.</p>
+
+<div class="card" style="max-width:680px">
+  <form method="post" action="{{ url_for('migrate_start') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="two-col">
+      <div class="field"><label>VM to migrate</label>
+        <select name="name" required>
+          {% for n in vm_names %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Destination host</label>
+        <input type="text" name="host" required placeholder="e.g. 192.168.1.10 or host2.example.com">
+      </div>
+      <div class="field"><label>Remote VM name (optional — blank = same name)</label>
+        <input type="text" name="remote_name" placeholder="leave blank to keep same name">
+      </div>
+    </div>
+
+    <div class="field">
+      <label style="font-weight:600;font-size:.85rem;color:var(--muted);display:block;margin-bottom:.4rem">Options</label>
+      <label class="check">
+        <input type="checkbox" name="start_remote">
+        Start VM on remote host after migration (<code>-s</code>)
+      </label>
+      <label class="check">
+        <input type="checkbox" name="triple">
+        Triple snapshot mode — send full + one incremental before final (<code>-t</code>, reduces downtime for large VMs)
+      </label>
+      <label class="check">
+        <input type="checkbox" name="destroy_local">
+        Destroy local VM after successful migration (<code>-x</code>)
+      </label>
+    </div>
+
+    <p class="note">
+      Migration can take many minutes for large VMs. The UI will block until it completes.
+      SSH key-based auth must be configured between this host and the destination —
+      password prompts will cause the migration to hang.
+    </p>
+
+    <button type="submit" class="primary"
+            onclick="return confirm('Start migration? The UI will be unresponsive until it completes.')">
+      Start migration
+    </button>
+  </form>
+</div>
+
+<h2>How it works</h2>
+<ol style="line-height:1.8;font-size:.9rem;max-width:620px">
+  <li>Takes a full ZFS snapshot and streams it to the remote host.</li>
+  <li>If triple mode: takes an incremental snapshot and streams it.</li>
+  <li>Powers off the VM and sends a final incremental snapshot.</li>
+  <li>Remote host has a running copy of the VM dataset.</li>
+  <li>If "Start remote" is checked, starts the VM on the remote host.</li>
+  <li>If "Destroy local" is checked, removes the VM from this host.</li>
+</ol>
+{% endblock %}

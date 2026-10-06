@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}vm-bhyve admin{% endblock %} · html-vm</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+{% if current_user %}
+{# ── Sidebar layout when logged in ── #}
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <a href="{{ url_for('index') }}">html-vm</a>
+    </div>
+
+    <nav class="sb-nav">
+
+      <div class="sb-section">Status</div>
+      <a href="{{ url_for('index') }}"
+         class="sb-link{{ ' active' if request.endpoint == 'index' else '' }}">
+        Dashboard
+      </a>
+
+      <div class="sb-section">VMs</div>
+      <a href="{{ url_for('index') }}#vm-list"
+         class="sb-link{{ ' active' if request.endpoint in ('vm_detail','vm_create','vm_action','vm_console','vm_disk_add','vm_disk_remove','vm_disk_update','vm_network_add','vm_network_remove','vm_network_update') else '' }}">
+        All VMs
+      </a>
+      <a href="{{ url_for('vm_create') }}"
+         class="sb-link{{ ' active' if request.endpoint == 'vm_create' else '' }}">
+        Create VM
+      </a>
+
+      <div class="sb-section">Network</div>
+      <a href="{{ url_for('networks') }}"
+         class="sb-link{{ ' active' if request.endpoint == 'networks' else '' }}">
+        Switches &amp; Tunnels
+      </a>
+
+      <div class="sb-section">Storage</div>
+      <a href="{{ url_for('iso_list') }}"
+         class="sb-link{{ ' active' if request.endpoint == 'iso_list' else '' }}">
+        ISO Images
+      </a>
+      <a href="{{ url_for('storage') }}"
+         class="sb-link{{ ' active' if request.endpoint in ('storage','vm_snapshots','vm_snapshot_create','vm_snapshot_delete','vm_rollback','vm_clone','image_create','image_provision','image_delete') else '' }}">
+        Snapshots &amp; Images
+      </a>
+      <a href="{{ url_for('migrate') }}"
+         class="sb-link{{ ' active' if request.endpoint in ('migrate','migrate_start') else '' }}">
+        Migrate VM
+      </a>
+
+      <div class="sb-section">Maintenance</div>
+      <a href="{{ url_for('maintenance') }}"
+         class="sb-link{{ ' active' if request.endpoint == 'maintenance' else '' }}">
+        Host Reboot
+      </a>
+
+    </nav>
+
+    <div class="sb-footer">
+      <span class="sb-user">{{ current_user }}</span>
+      <form method="post" action="{{ url_for('logout') }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sb-logout">Log out</button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="content-wrap">
+    <div class="flashes-wrap">
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% if msgs %}
+          <section class="flashes">
+            {% for cat, msg in msgs %}
+              <div class="flash {{ cat }}">{{ msg }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+    </div>
+    <main>{% block content %}{% endblock %}</main>
+  </div>
+
+</div>
+
+{% else %}
+{# ── Top-bar only for login page ── #}
+<nav class="top">
+  <span class="brand">html-vm</span>
+</nav>
+<main class="login-main">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <section class="flashes">
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endwith %}
+  {# login page renders into the single block defined above #}
+  {{ self.content() }}
+</main>
+{% endif %}
+
+</body>
+</html>

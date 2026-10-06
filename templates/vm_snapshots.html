@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Snapshots — {{ vmname }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Snapshots — {{ vmname }}</h1>
+</div>
+<p class="sub">
+  State: <strong>{{ v.state if v else 'unknown' }}</strong>.
+  Snapshots and rollback require a ZFS datastore.
+  VM must be <strong>stopped</strong> for rollback and clone.
+</p>
+
+{% if err %}
+  <div class="flash error" style="border-radius:6px;padding:.5rem .8rem;margin-bottom:.8rem">{{ err }}</div>
+{% endif %}
+
+{# ── Snapshot list ── #}
+<h2>Snapshots</h2>
+<table class="data">
+  <thead><tr><th>Snapshot</th><th>Used</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {% for s in snaps %}
+  <tr>
+    <td class="mono">{{ s.short }}</td>
+    <td>{{ s.used }}</td>
+    <td>{{ s.creation }}</td>
+    <td style="white-space:nowrap">
+      <button class="edit-btn" onclick="toggleDrawer('rb-{{ loop.index0 }}', this)">Rollback to this</button>
+      <form method="post" action="{{ url_for('vm_snapshot_delete', name=vmname, snap=s.short) }}" class="inline"
+            onsubmit="return confirm('Delete snapshot {{ s.short }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="danger small">Delete</button>
+      </form>
+    </td>
+  </tr>
+  <tr class="row-drawer" id="rb-{{ loop.index0 }}">
+    <td colspan="4">
+      <p class="drawer-title">Roll back {{ vmname }} to {{ s.short }}</p>
+      <p class="note" style="margin:.2rem 0 .6rem;color:#b05b0f">⚠ VM must be stopped. This will destroy any snapshots newer than <strong>{{ s.short }}</strong> unless you check "force".</p>
+      <form method="post" action="{{ url_for('vm_rollback', name=vmname) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="snap_name" value="{{ s.short }}">
+        <div class="drawer-actions">
+          <label style="font-size:.85rem;display:flex;align-items:center;gap:.3rem">
+            <input type="checkbox" name="force"> Force (-r, removes newer snapshots)
+          </label>
+          <button type="submit" class="danger small"
+                  onclick="return confirm('Roll back to {{ s.short }}? This cannot be undone.')">
+            Rollback
+          </button>
+          <button type="button" class="small" onclick="toggleDrawer('rb-{{ loop.index0 }}', null)">Cancel</button>
+        </div>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="dim">No snapshots found{% if err %} ({{ err }}){% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{# ── Take snapshot ── #}
+<div class="add-panel">
+  <p class="add-panel-title">Take a snapshot</p>
+  <form method="post" action="{{ url_for('vm_snapshot_create', name=vmname) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="drawer-grid">
+      <div class="field"><label>Snapshot name (optional — blank = timestamp)</label>
+        <input type="text" name="snap_name" placeholder="e.g. pre-upgrade">
+      </div>
+    </div>
+    <p class="note">A running VM can be snapshotted; the snapshot may be crash-consistent only.</p>
+    <button type="submit" class="primary small">Take snapshot</button>
+  </form>
+</div>
+
+{# ── Clone ── #}
+<div class="add-panel">
+  <p class="add-panel-title">Clone this VM</p>
+  <form method="post" action="{{ url_for('vm_clone', name=vmname) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="drawer-grid">
+      <div class="field"><label>New VM name (required)</label>
+        <input type="text" name="new_name" required placeholder="e.g. myvm-clone">
+      </div>
+      <div class="field"><label>From snapshot (optional — blank = take new one)</label>
+        <select name="snap_name">
+          <option value="">— take a new snapshot —</option>
+          {% for s in snaps %}
+          <option value="{{ s.short }}">{{ s.short }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <p class="note">VM must be stopped. Creates a full independent copy. Requires ZFS.</p>
+    <button type="submit" class="primary small">Clone VM</button>
+  </form>
+</div>
+
+<p><a href="{{ url_for('storage') }}">&larr; back to Storage</a></p>
+
+<script>
+function toggleDrawer(id, btn) {
+  var el = document.getElementById(id);
+  var open = el.classList.contains('open');
+  document.querySelectorAll('.row-drawer.open').forEach(function(e) {
+    e.classList.remove('open');
+    var b = document.querySelector('[onclick*="' + e.id + '"]');
+    if (b) b.classList.remove('active');
+  });
+  if (!open && btn !== null) {
+    el.classList.add('open');
+    if (btn) btn.classList.add('active');
+  }
+}
+</script>
+{% endblock %}
