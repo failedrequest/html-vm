@@ -1023,12 +1023,14 @@ def reboot_vm(name):
 def delete_vm(name):
     if not valid_name(name):
         return "error: invalid name", 1
-    run(["stop", name], timeout=30)
+    stop_out, stop_rc = run(["stop", name], timeout=30)
     out, rc = run(["destroy", "-f", name])
+    # Combine output so the caller can inspect warnings from both steps.
+    combined = "\n".join(filter(None, [stop_out.strip(), out.strip()]))
     # Clean up the ZFS dataset if one exists (vm destroy only removes files,
     # not the dataset itself).
     destroy_vm_zfs_dataset(name)
-    return out, rc
+    return combined, rc
 
 
 # ── VM creation ─────────────────────────────────────────────────────────────
