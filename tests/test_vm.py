@@ -728,6 +728,46 @@ lo0: flags=1008049<UP,LOOPBACK,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 16384
         self.assertNotIn("ipsec0", ifaces)
 
 
+class RemoveLockFileTests(unittest.TestCase):
+    """Unit tests for remove_lock_file."""
+
+    def test_removes_existing_lock(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            # Fake VM_DATASTORE so the path resolves into our tmpdir
+            lock_dir = os.path.join(d, "testvm")
+            os.makedirs(lock_dir)
+            lock_path = os.path.join(lock_dir, "run.lock")
+            open(lock_path, "w").close()
+            orig = vm.VM_DATASTORE
+            vm.VM_DATASTORE = d
+            try:
+                msg, rc = vm.remove_lock_file("testvm")
+            finally:
+                vm.VM_DATASTORE = orig
+        self.assertEqual(rc, 0)
+        self.assertIn("removed", msg)
+        self.assertFalse(os.path.exists(lock_path))
+
+    def test_no_lock_file_returns_error(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            lock_dir = os.path.join(d, "testvm")
+            os.makedirs(lock_dir)
+            orig = vm.VM_DATASTORE
+            vm.VM_DATASTORE = d
+            try:
+                msg, rc = vm.remove_lock_file("testvm")
+            finally:
+                vm.VM_DATASTORE = orig
+        self.assertEqual(rc, 1)
+        self.assertIn("no lock file", msg)
+
+    def test_invalid_name(self):
+        _, rc = vm.remove_lock_file("bad name!")
+        self.assertEqual(rc, 1)
+
+
 class RenameStopAllTests(unittest.TestCase):
     """Unit tests for vm_rename, vm_stopall, vm_startall, iso_fetch."""
 

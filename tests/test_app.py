@@ -1082,6 +1082,41 @@ class VmDiskNetRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class UnlockRouteTests(unittest.TestCase):
+    """Route tests for /vm/<name>/unlock."""
+
+    def setUp(self):
+        app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False
+        self.client = app.test_client()
+        _login(self.client)
+
+    def test_unlock_success(self):
+        csrf = _csrf(self.client)
+        v = _make_vm("testvm")
+        with patch("app.vm.remove_lock_file", return_value=("removed /var/vm/testvm/run.lock", 0)) as m, \
+             patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            resp = self.client.post("/vm/testvm/unlock",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with("testvm")
+        self.assertIn(b"removed", resp.data.lower())
+
+    def test_unlock_no_lock_file(self):
+        csrf = _csrf(self.client)
+        v = _make_vm("testvm")
+        with patch("app.vm.remove_lock_file", return_value=("no lock file found", 1)), \
+             patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            resp = self.client.post("/vm/testvm/unlock",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        self.assertIn(b"failed", resp.data.lower())
+
+
 class RenameStopAllRouteTests(unittest.TestCase):
     """Route tests for vm_rename, vms_stopall, vms_startall, iso_fetch."""
 

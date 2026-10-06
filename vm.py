@@ -1020,6 +1020,25 @@ def reboot_vm(name):
     return run(["restart", name])
 
 
+def remove_lock_file(name):
+    """Remove the run.lock file for VM *name*.
+
+    vm-bhyve writes VM_DATASTORE/<name>/run.lock while a VM is running.
+    If bhyve crashes or is killed externally the lock file is left behind,
+    preventing ``vm destroy``.  Returns (message, rc).
+    """
+    if not valid_name(name):
+        return "error: invalid name", 1
+    lock = os.path.join(VM_DATASTORE, name, "run.lock")
+    if not os.path.exists(lock):
+        return "no lock file found at {0}".format(lock), 1
+    try:
+        os.remove(lock)
+        return "removed {0}".format(lock), 0
+    except OSError as e:
+        return str(e), 1
+
+
 def delete_vm(name):
     if not valid_name(name):
         return "error: invalid name", 1

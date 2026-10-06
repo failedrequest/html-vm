@@ -214,9 +214,9 @@ def vm_action(name, action):
         out, rc = vm.delete_vm(name)
         if rc != 0 and ("locked" in (out or "").lower() or "appears to be running" in (out or "").lower()):
             flash(
-                "Delete failed: {0} — VM is locked (bhyve still holds the VMM context). "
-                "Click 'Destroy VMM context' below, then delete again. "
-                "Or run: sudo bhyvectl --destroy --vm={1}".format(
+                "Delete failed: {0} — a run.lock file is blocking deletion. "
+                "Use the 'Remove lock file' button below, then delete again. "
+                "Manual fix: rm /var/vm/{1}/run.lock".format(
                     out.strip().splitlines()[-1] if out.strip() else "vm is locked",
                     name,
                 ),
@@ -237,6 +237,18 @@ def vm_action(name, action):
         ))
     else:
         abort(404)
+    return redirect(url_for("vm_detail", name=name))
+
+
+@app.route("/vm/<name>/unlock", methods=["POST"])
+@login_required
+def vm_unlock(name):
+    name = _vm_name_or_404(name)
+    msg, rc = vm.remove_lock_file(name)
+    if rc == 0:
+        flash("Lock file removed: " + msg, "ok")
+    else:
+        flash("Remove lock file failed: " + msg, "error")
     return redirect(url_for("vm_detail", name=name))
 
 

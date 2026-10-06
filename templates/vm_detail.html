@@ -292,9 +292,9 @@
     <button class="danger">Delete</button>
   </form>
 </div>
-<p class="note">If delete reports <em>locked</em>, the bhyve VMM context is still active.
-  Use <strong>Destroy VMM context</strong> below to release it, then delete again.
-  Manual fix: <code>sudo bhyvectl --destroy --vm={{ v.name }}</code></p>
+<p class="note">If delete reports <em>locked</em>, vm-bhyve found a stale
+  <code>run.lock</code> file. Use <strong>Remove lock file</strong> below, then delete again.
+  Manual fix: <code>rm /var/vm/{{ v.name }}/run.lock</code></p>
 
 <h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
 <div class="actions">
@@ -313,9 +313,15 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="danger">Destroy VMM context</button>
   </form>
+  <form method="post" action="{{ url_for('vm_unlock', name=v.name) }}" class="inline"
+        onsubmit="return confirm('Remove run.lock for {{ v.name }}? Only do this if the VM is not actually running.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Remove lock file</button>
+  </form>
 </div>
 <p class="note">Use only when normal stop fails. Force ops call <code>bhyvectl</code> directly — no graceful shutdown.
-Destroy VMM context releases the kernel VMM device for an orphaned guest.</p>
+Destroy VMM context releases the kernel VMM device for an orphaned guest.
+Remove lock file deletes <code>/var/vm/{{ v.name }}/run.lock</code> — only use this when bhyve is no longer running.</p>
 
 {# ────────────────── Rename ────────────────── #}
 <h2>Rename VM <span class="hint">(VM must be stopped)</span></h2>
