@@ -292,6 +292,9 @@
     <button class="danger">Delete</button>
   </form>
 </div>
+<p class="note">If delete reports <em>locked</em>, the bhyve VMM context is still active.
+  Use <strong>Destroy VMM context</strong> below to release it, then delete again.
+  Manual fix: <code>sudo bhyvectl --destroy --vm={{ v.name }}</code></p>
 
 <h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
 <div class="actions">

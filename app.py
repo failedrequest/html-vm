@@ -211,8 +211,22 @@ def vm_action(name, action):
     elif action == "destroy-vmm":
         _flash_result("Destroy VMM context", vm.destroy_vmm(name))
     elif action == "delete":
-        _flash_result("Delete", vm.delete_vm(name))
-        return redirect(url_for("index"))
+        out, rc = vm.delete_vm(name)
+        if rc != 0 and "locked" in (out or "").lower():
+            flash(
+                "Delete failed: {0} — VM is locked (bhyve still holds the VMM context). "
+                "Click 'Destroy VMM context' below, then delete again. "
+                "Or run: sudo bhyvectl --destroy --vm={1}".format(
+                    out.strip().splitlines()[-1] if out.strip() else "vm is locked",
+                    name,
+                ),
+                "error",
+            )
+        else:
+            _flash_result("Delete", (out, rc))
+            if rc == 0:
+                return redirect(url_for("index"))
+        return redirect(url_for("vm_detail", name=name))
     elif action == "update":
         cpu = request.form.get("cpu") or None
         memory = request.form.get("memory") or None
