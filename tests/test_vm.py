@@ -728,6 +728,60 @@ lo0: flags=1008049<UP,LOOPBACK,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 16384
         self.assertNotIn("ipsec0", ifaces)
 
 
+class RenameStopAllTests(unittest.TestCase):
+    """Unit tests for vm_rename, vm_stopall, vm_startall, iso_fetch."""
+
+    def test_vm_rename_success(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            out, rc = vm.vm_rename("old", "newvm")
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["rename", "old", "newvm"])
+
+    def test_vm_rename_invalid_name(self):
+        _, rc = vm.vm_rename("bad name!", "newvm")
+        self.assertEqual(rc, 1)
+        _, rc = vm.vm_rename("old", "bad name!")
+        self.assertEqual(rc, 1)
+
+    def test_vm_stopall_no_force(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.vm_stopall(force=False)
+        m.assert_called_once_with(["stopall"], timeout=120)
+
+    def test_vm_stopall_force(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.vm_stopall(force=True)
+        m.assert_called_once_with(["stopall", "-f"], timeout=120)
+
+    def test_vm_startall(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.vm_startall()
+        m.assert_called_once_with(["startall"], timeout=120)
+
+    def test_iso_fetch_success(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("ok", 0)) as m:
+            out, rc = vm.iso_fetch("https://example.com/install.iso")
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["iso", "https://example.com/install.iso"], timeout=3600)
+
+    def test_iso_fetch_bad_url(self):
+        _, rc = vm.iso_fetch("not-a-url")
+        self.assertEqual(rc, 1)
+        _, rc = vm.iso_fetch("")
+        self.assertEqual(rc, 1)
+
+    def test_iso_fetch_ftp(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)):
+            out, rc = vm.iso_fetch("ftp://mirror.example.com/file.iso")
+        self.assertEqual(rc, 0)
+
+
 class DiskNetConfTests(unittest.TestCase):
     """Unit tests for vm_conf_disks/networks and add/remove/update helpers.
 

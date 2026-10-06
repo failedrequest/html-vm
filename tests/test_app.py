@@ -1082,5 +1082,123 @@ class VmDiskNetRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class RenameStopAllRouteTests(unittest.TestCase):
+    """Route tests for vm_rename, vms_stopall, vms_startall, iso_fetch."""
+
+    def setUp(self):
+        app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False
+        self.client = app.test_client()
+        _login(self.client)
+
+    # ── rename ────────────────────────────────────────────────────────────
+
+    def test_rename_success_redirects_to_new_name(self):
+        csrf = _csrf(self.client)
+        v = _make_vm("old")
+        with patch("app.vm.vm_rename", return_value=("", 0)) as m, \
+             patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=_make_vm("newvm")), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            resp = self.client.post("/vm/old/rename",
+                                    data={"csrf_token": csrf, "new_name": "newvm"},
+                                    follow_redirects=False)
+        m.assert_called_once_with("old", "newvm")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(b"newvm", resp.headers["Location"].encode())
+
+    def test_rename_failure_flashes_error(self):
+        csrf = _csrf(self.client)
+        v = _make_vm("old")
+        with patch("app.vm.vm_rename", return_value=("vm rename: not stopped", 1)), \
+             patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            resp = self.client.post("/vm/old/rename",
+                                    data={"csrf_token": csrf, "new_name": "newvm"},
+                                    follow_redirects=True)
+        self.assertIn(b"failed", resp.data.lower())
+
+    def test_rename_missing_new_name(self):
+        csrf = _csrf(self.client)
+        v = _make_vm("old")
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            resp = self.client.post("/vm/old/rename",
+                                    data={"csrf_token": csrf, "new_name": ""},
+                                    follow_redirects=True)
+        self.assertIn(b"required", resp.data.lower())
+
+    # ── stopall / startall ────────────────────────────────────────────────
+
+    def test_stopall_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vm_stopall", return_value=("", 0)) as m, \
+             patch("app.vm.list_vms", return_value=([], None)), \
+             patch("app.vm.host_info", return_value={}), \
+             patch("app.vm.vm_aggregate_stats", return_value={}):
+            resp = self.client.post("/vms/stopall",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with(force=False)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_stopall_force(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vm_stopall", return_value=("", 0)) as m, \
+             patch("app.vm.list_vms", return_value=([], None)), \
+             patch("app.vm.host_info", return_value={}), \
+             patch("app.vm.vm_aggregate_stats", return_value={}):
+            resp = self.client.post("/vms/stopall",
+                                    data={"csrf_token": csrf, "force": "1"},
+                                    follow_redirects=True)
+        m.assert_called_once_with(force=True)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_startall_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vm_startall", return_value=("", 0)) as m, \
+             patch("app.vm.list_vms", return_value=([], None)), \
+             patch("app.vm.host_info", return_value={}), \
+             patch("app.vm.vm_aggregate_stats", return_value={}):
+            resp = self.client.post("/vms/startall",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with()
+        self.assertEqual(resp.status_code, 200)
+
+    # ── iso_fetch ─────────────────────────────────────────────────────────
+
+    def test_iso_fetch_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.iso_fetch", return_value=("", 0)) as m, \
+             patch("app.vm.list_isos", return_value=([], None)):
+            resp = self.client.post("/isos/fetch",
+                                    data={"csrf_token": csrf,
+                                          "url": "https://example.com/x.iso"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("https://example.com/x.iso")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_iso_fetch_failure(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.iso_fetch", return_value=("vm iso: download failed", 1)), \
+             patch("app.vm.list_isos", return_value=([], None)):
+            resp = self.client.post("/isos/fetch",
+                                    data={"csrf_token": csrf,
+                                          "url": "https://example.com/x.iso"},
+                                    follow_redirects=True)
+        self.assertIn(b"failed", resp.data.lower())
+
+    def test_iso_fetch_missing_url(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.list_isos", return_value=([], None)):
+            resp = self.client.post("/isos/fetch",
+                                    data={"csrf_token": csrf, "url": ""},
+                                    follow_redirects=True)
+        self.assertIn(b"required", resp.data.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

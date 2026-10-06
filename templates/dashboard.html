@@ -3,7 +3,19 @@
 {% block content %}
 <div class="headrow">
   <h1>Virtual Machines</h1>
-  <a href="{{ url_for('vm_create') }}" class="button">Create VM</a>
+  <div style="display:flex;gap:.5rem;align-items:center">
+    <form method="post" action="{{ url_for('vms_startall') }}" class="inline"
+          onsubmit="return confirm('Start all autostart VMs?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="small">Start all</button>
+    </form>
+    <form method="post" action="{{ url_for('vms_stopall') }}" class="inline"
+          onsubmit="return confirm('Stop all running VMs?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="small danger">Stop all</button>
+    </form>
+    <a href="{{ url_for('vm_create') }}" class="button">Create VM</a>
+  </div>
 </div>
 
 {% if vm_error %}<div class="flash error">{{ vm_error }}</div>{% endif %}

@@ -226,6 +226,37 @@ def vm_action(name, action):
     return redirect(url_for("vm_detail", name=name))
 
 
+@app.route("/vm/<name>/rename", methods=["POST"])
+@login_required
+def vm_rename(name):
+    name = _vm_name_or_404(name)
+    new_name = (request.form.get("new_name") or "").strip()
+    if not new_name:
+        flash("New name is required", "error")
+        return redirect(url_for("vm_detail", name=name))
+    out, rc = vm.vm_rename(name, new_name)
+    if rc == 0:
+        flash("VM renamed to '{0}'".format(new_name), "ok")
+        return redirect(url_for("vm_detail", name=new_name))
+    flash("Rename failed: " + (out.strip().splitlines()[-1]
+                               if out.strip() else str(out)), "error")
+    return redirect(url_for("vm_detail", name=name))
+
+
+@app.route("/vms/stopall", methods=["POST"])
+@login_required
+def vms_stopall():
+    force = bool(request.form.get("force"))
+    _flash_result("Stop all", vm.vm_stopall(force=force))
+    return redirect(url_for("index"))
+
+
+@app.route("/vms/startall", methods=["POST"])
+@login_required
+def vms_startall():
+    _flash_result("Start all", vm.vm_startall())
+    return redirect(url_for("index"))
+
 
 # --------------------------------------------------------------------------
 # Serial console via gotty
@@ -392,6 +423,22 @@ def iso_delete(filename):
         flash("Deleted '{0}'".format(filename), "ok")
     else:
         flash("Delete failed: " + msg, "error")
+    return redirect(url_for("iso_list"))
+
+
+@app.route("/isos/fetch", methods=["POST"])
+@login_required
+def iso_fetch():
+    url = (request.form.get("url") or "").strip()
+    if not url:
+        flash("URL is required", "error")
+        return redirect(url_for("iso_list"))
+    out, rc = vm.iso_fetch(url)
+    if rc == 0:
+        flash("ISO fetched from '{0}'".format(url), "ok")
+    else:
+        flash("Fetch failed: " + (out.strip().splitlines()[-1]
+                                  if out.strip() else str(out)), "error")
     return redirect(url_for("iso_list"))
 
 

@@ -35,6 +35,20 @@
   </tbody>
 </table>
 
+<h2>Download ISO from URL</h2>
+<div class="card">
+  <form method="post" action="{{ url_for('iso_fetch') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label>URL <span class="hint">http://, https://, or ftp://</span></label>
+      <input type="text" name="url" placeholder="https://example.com/install.iso" required style="width:100%;max-width:36rem">
+    </div>
+    <button type="submit" class="primary">Fetch</button>
+    <p class="note">Runs <code>vm iso &lt;url&gt;</code> — the file is saved into the datastore <code>.iso/</code> directory.
+    This may take several minutes for large files.</p>
+  </form>
+</div>
+
 <h2>Upload ISO</h2>
 <div class="card">
   <form method="post" action="{{ url_for('iso_upload') }}" enctype="multipart/form-data" id="upload-form">

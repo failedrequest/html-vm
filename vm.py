@@ -1907,6 +1907,47 @@ def vm_image_destroy(uuid):
     return run(["image", "destroy", uuid])
 
 
+# ── Rename / bulk lifecycle ────────────────────────────────────────────────
+
+
+def vm_rename(name, new_name):
+    """Rename VM *name* to *new_name* via ``vm rename``.
+
+    VM must be stopped.  Returns (output, rc).
+    """
+    if not valid_name(name) or not valid_name(new_name):
+        return "error: invalid name", 1
+    return run(["rename", name, new_name])
+
+
+def vm_stopall(force=False):
+    """Stop all running VMs via ``vm stopall``.  Returns (output, rc)."""
+    args = ["stopall"]
+    if force:
+        args.append("-f")
+    return run(args, timeout=120)
+
+
+def vm_startall():
+    """Start all autostart VMs via ``vm startall``.  Returns (output, rc)."""
+    return run(["startall"], timeout=120)
+
+
+# ── ISO download ────────────────────────────────────────────────────────────
+
+
+def iso_fetch(url):
+    """Download an ISO/image from *url* into the datastore ISO directory.
+
+    Runs ``vm iso <url>``.  Returns (output, rc).
+    This is a potentially long-running operation; call in a background thread
+    for production use.
+    """
+    if not url or not url.startswith(("http://", "https://", "ftp://")):
+        return "error: URL must start with http://, https://, or ftp://", 1
+    return run(["iso", url], timeout=3600)
+
+
 # ── Migration ──────────────────────────────────────────────────────────────
 
 def vm_migrate(name, host, remote_name=None, start_remote=False, triple=False,

@@ -1,6 +1,6 @@
 # html-vm — Project Status
 
-**Last updated:** 2025-07-18  
+**Last updated:** 2025-07-19
 **Platform:** FreeBSD 15.1 · Python 3.12 · Flask 3.1 · vm-bhyve  
 **Entry point:** `sudo .venv/bin/python run.py` (gevent + geventwebsocket, port 8088)
 
@@ -122,8 +122,8 @@ Conf edits are done by rewriting the `.conf` file directly using `_conf_set` / `
 ## Test status
 
 ```
-205 tests — OK (all pass)
-pyflakes — 0 warnings
+222 tests — OK (all pass)
+pyflakes — 0 warnings (pre-existing unused-import notices in test files only)
 ```
 
 ### `tests/test_vm.py` — vm.py unit tests (93 tests)
@@ -190,6 +190,9 @@ Run all tests:
 - [x] noVNC / VNC permanently removed
 - [x] **vm.py disk/network conf functions** — `vm_conf_disks`, `vm_conf_networks`, `add/remove/update_disk_conf`, `add/remove/update_network_conf`
 - [x] **Disk/network edit UI** — 6 routes in `app.py`, edit/add/remove sections in `vm_detail.html`, 48 new tests (205 total)
+- [x] **Rename VM** — `vm rename` via `/vm/<name>/rename` POST; form in `vm_detail.html`
+- [x] **Stop all / Start all** — `vm stopall/startall` via `/vms/stopall` and `/vms/startall`; buttons in `dashboard.html`
+- [x] **Download ISO from URL** — `vm iso <url>` via `/isos/fetch` POST; form in `isos.html`
 
 ---
 
