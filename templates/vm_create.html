@@ -101,15 +101,26 @@
 
     {# ── ZFS dataset ────────────────────────────────────────────────── #}
     <h3 class="sect-hdr">Storage</h3>
-    <label class="check">
-      <input type="checkbox" name="zfs_dataset" value="1" id="chk-zfs">
-      Create a ZFS dataset for this VM
-      <span class="hint">— enables snapshots, clone, and migration</span>
-    </label>
-    <p class="note" id="zfs-note" style="display:none">
-      A dataset will be created at <strong id="zfs-ds-preview"></strong>
-      before provisioning.  Requires ZFS to be available for the VM datastore.
-    </p>
+    {% if vm_dir_zfs %}
+      {# vm-bhyve is configured with zfs:pool/dataset — it creates per-VM
+         datasets automatically on vm create. Nothing to do here. #}
+      <p class="note">
+        ✓ vm-bhyve is configured with a ZFS datastore — each VM automatically
+        gets its own ZFS dataset. Snapshots, clone, and migration are available.
+      </p>
+      <input type="hidden" name="zfs_dataset" value="0">
+    {% else %}
+      <label class="check">
+        <input type="checkbox" name="zfs_dataset" value="1" id="chk-zfs">
+        Create a ZFS dataset for this VM
+        <span class="hint">— enables snapshots, clone, and migration</span>
+      </label>
+      <p class="note" id="zfs-note" style="display:none">
+        A ZFS dataset will be created at <strong id="zfs-ds-preview"></strong>
+        with <code>mountpoint={{ vm_datastore }}/<em>vmname</em></code>
+        before provisioning.
+      </p>
+    {% endif %}
 
     <hr class="sect">
 

@@ -1652,6 +1652,25 @@ def _zfs_bin():
     return "/sbin/zfs"
 
 
+def vm_dir_uses_zfs():
+    """Return True if vm-bhyve is configured with a ZFS datastore.
+
+    Reads /etc/rc.conf looking for vm_dir="zfs:...".  When True, vm-bhyve
+    creates a per-VM ZFS dataset automatically on ``vm create`` — no manual
+    dataset creation is needed or wanted.
+    """
+    try:
+        with open("/etc/rc.conf") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("vm_dir="):
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    return val.startswith("zfs:")
+    except OSError:
+        pass
+    return False
+
+
 def _zfs_parent_for_vmdir():
     """Return the ZFS dataset that should be the parent for per-VM datasets.
 
@@ -1712,8 +1731,14 @@ def zfs_vm_dataset_exists(name):
 def create_vm_zfs_dataset(name):
     """Create a ZFS dataset for VM *name* at VM_DATASTORE/<name>.
 
-    Creates the vm container dataset (e.g. pool0/var/vm) if it doesn't exist,
-    then creates pool0/var/vm/<name> with mountpoint=/var/vm/<name>.
+    Resolves the ZFS pool that owns VM_DATASTORE, then creates a per-VM
+    dataset at <pool>/vm/<name> (or <container>/<name> when VM_DATASTORE
+    already has a dedicated dataset) with mountpoint=VM_DATASTORE/<name>.
+
+    If VM_DATASTORE itself is just a plain directory inside a larger dataset
+    (the common case when vm_dir="/var/vm" and no dedicated vm dataset exists),
+    this first creates the container dataset with the correct mountpoint, then
+    the per-VM dataset underneath it.
 
     Returns (dataset_name, error_string).  error_string is None on success.
     """
@@ -1727,22 +1752,28 @@ def create_vm_zfs_dataset(name):
     vm_ds = container_ds.rstrip("/") + "/" + name
     vm_path = os.path.join(VM_DATASTORE, name)
 
-    # Create the container dataset (e.g. pool0/var/vm) if it doesn't exist.
+    # Create the container dataset (e.g. pool0/var/vm) if it doesn't exist yet.
     chk, rc = _exec([_zfs_bin(), "list", "-H", "-o", "name", container_ds], timeout=10)
     if rc != 0:
+        # The container path may already exist as a plain directory.
+        # Create the dataset and set mountpoint explicitly so ZFS takes it over.
         out, rc = _exec([_zfs_bin(), "create",
                          "-o", "mountpoint=" + VM_DATASTORE,
                          container_ds], timeout=30)
         if rc != 0:
-            return None, "zfs create {0} failed: {1}".format(container_ds, out.strip())
+            # If the failure is "dataset already exists" we can proceed.
+            if "already exists" not in out:
+                return None, "zfs create {0} failed: {1}".format(container_ds, out.strip())
 
     # Check the per-VM dataset doesn't already exist.
     chk, rc = _exec([_zfs_bin(), "list", "-H", "-o", "name", vm_ds], timeout=10)
     if rc == 0:
         return vm_ds, None  # already exists, fine
 
-    # Create the per-VM dataset.
+    # Create the per-VM dataset with an explicit mountpoint.
+    # Use -p to create intermediate datasets if needed (idempotent).
     out, rc = _exec([_zfs_bin(), "create",
+                     "-p",
                      "-o", "mountpoint=" + vm_path,
                      vm_ds], timeout=30)
     if rc != 0:

@@ -392,13 +392,17 @@ def vm_create():
                                os_profiles=vm.OS_PROFILES,
                                loaders=vm.LOADERS,
                                disk_types=vm.DISK_TYPES,
-                               nic_types=vm.NIC_TYPES), 400
+                               nic_types=vm.NIC_TYPES,
+                               vm_dir_zfs=vm.vm_dir_uses_zfs(),
+                               vm_datastore=vm.VM_DATASTORE), 400
     return render_template("vm_create.html",
                            switches=_switch_names(), isos=isos,
                            os_profiles=vm.OS_PROFILES,
                            loaders=vm.LOADERS,
                            disk_types=vm.DISK_TYPES,
-                           nic_types=vm.NIC_TYPES)
+                           nic_types=vm.NIC_TYPES,
+                           vm_dir_zfs=vm.vm_dir_uses_zfs(),
+                           vm_datastore=vm.VM_DATASTORE)
 
 
 # --------------------------------------------------------------------------
