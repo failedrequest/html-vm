@@ -69,6 +69,8 @@ pkg install -y \
     py312-werkzeug \
     py312-wsproto \
     vm-bhyve \
+    edk2-bhyve-g202508_2 \
+    grub2-bhyve \
     gotty
 
 echo "    pkg packages OK"
