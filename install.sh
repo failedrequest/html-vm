@@ -97,6 +97,8 @@ if [ "${VMBHYVE_PREINSTALLED}" -eq 0 ]; then
     echo "         vm switch create public"
     echo "         vm switch add public em0"
     echo ""
+    echo "    4. Copy in templates to fit your needs from /usr/local/share/examples/vm-bhyve/ into $vm_dir/.templates"
+
 else
     echo "    vm-bhyve already installed — configuration untouched"
 fi
