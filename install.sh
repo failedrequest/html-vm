@@ -69,7 +69,7 @@ pkg install -y \
     py312-werkzeug \
     py312-wsproto \
     vm-bhyve \
-    edk2-bhyve-g202508_2 \
+    edk2-bhyve \
     grub2-bhyve \
     gotty
 
