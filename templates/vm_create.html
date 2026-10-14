@@ -175,7 +175,7 @@ var nameInp = document.querySelector('input[name="name"]');
 function updateZfsPreview() {
   if (!chkZfs.checked) { zfsNote.style.display = 'none'; return; }
   var n = (nameInp ? nameInp.value.trim() : '') || '<vmname>';
-  if (zfsPrev) zfsPrev.textContent = '<pool>/var/vm/' + n;
+  if (zfsPrev) zfsPrev.textContent = '{{ vm_datastore }}/' + n;
   zfsNote.style.display = '';
 }
 if (chkZfs)  chkZfs.addEventListener('change', updateZfsPreview);

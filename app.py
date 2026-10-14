@@ -191,7 +191,8 @@ def vm_detail(name):
     return render_template("vm_detail.html", v=target, switches=_switch_names(),
                            loaders=vm.LOADERS, disk_types=vm.DISK_TYPES,
                            nic_types=vm.NIC_TYPES, isos=isos,
-                           iso_dir=vm.ISO_DIR)
+                           iso_dir=vm.ISO_DIR,
+                           vm_datastore=vm.VM_DATASTORE)
 
 
 @app.route("/vm/<name>/<action>", methods=["POST"])
@@ -213,12 +214,12 @@ def vm_action(name, action):
     elif action == "delete":
         out, rc = vm.delete_vm(name)
         if rc != 0 and ("locked" in (out or "").lower() or "appears to be running" in (out or "").lower()):
+            last_line = out.strip().splitlines()[-1] if out.strip() else "vm is locked"
             flash(
                 "Delete failed: {0} — a run.lock file is blocking deletion. "
                 "Use the 'Remove lock file' button below, then delete again. "
-                "Manual fix: rm /var/vm/{1}/run.lock".format(
-                    out.strip().splitlines()[-1] if out.strip() else "vm is locked",
-                    name,
+                "Manual fix: rm {1}/{2}/run.lock".format(
+                    last_line, vm.VM_DATASTORE, name,
                 ),
                 "error",
             )

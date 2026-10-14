@@ -14,9 +14,48 @@ import threading
 
 VM_BIN = "/usr/local/sbin/vm"
 
-# Default datastore path – overridden by VM_DATASTORE env var or read from
-# the system.conf when a real vm is running.
-VM_DATASTORE = os.environ.get("VM_DATASTORE", "/var/vm")
+
+def _read_vm_dir():
+    """Return the vm-bhyve datastore path by asking sysrc(8) for vm_dir.
+
+    sysrc reads /etc/rc.conf (and all files in rc_conf_files / rc.conf.d/)
+    so it correctly honours any non-default location the operator has set.
+
+    vm_dir can be:
+      * a plain path  e.g. "/var/vm"
+      * a ZFS spec    e.g. "zfs:pool0/vms"
+
+    For the ZFS case we resolve the dataset mountpoint so that all path
+    operations work correctly — the same thing vm-bhyve does internally.
+
+    Falls back to "/var/vm" only if sysrc is unavailable or vm_dir is unset.
+    """
+    try:
+        p = subprocess.run(
+            ["/usr/sbin/sysrc", "-n", "vm_dir"],
+            capture_output=True, text=True, timeout=5,
+        )
+        val = p.stdout.strip()
+        if not val or p.returncode != 0:
+            return "/var/vm"
+        # ZFS spec: "zfs:pool/dataset" — resolve to mountpoint
+        if val.startswith("zfs:"):
+            dataset = val[4:]
+            mp = subprocess.run(
+                ["/sbin/zfs", "get", "-H", "-o", "value", "mountpoint", dataset],
+                capture_output=True, text=True, timeout=5,
+            )
+            mount = mp.stdout.strip()
+            if mount and mount not in ("none", "-", "legacy") and mp.returncode == 0:
+                return mount
+            # dataset not mounted yet — return the path by convention
+            return "/" + dataset.replace("/", "/", 1)
+        return val
+    except Exception:
+        return "/var/vm"
+
+
+VM_DATASTORE = _read_vm_dir()
 ISO_DIR = os.path.join(VM_DATASTORE, ".iso")
 
 #: vm-bhyve guest names: lower case, start/end alphanumeric.
@@ -1655,20 +1694,18 @@ def _zfs_bin():
 def vm_dir_uses_zfs():
     """Return True if vm-bhyve is configured with a ZFS datastore.
 
-    Reads /etc/rc.conf looking for vm_dir="zfs:...".  When True, vm-bhyve
-    creates a per-VM ZFS dataset automatically on ``vm create`` — no manual
-    dataset creation is needed or wanted.
+    Uses sysrc(8) to read vm_dir so that rc.conf.d/ and rc_conf_files
+    overrides are honoured.  When True, vm-bhyve creates a per-VM ZFS
+    dataset automatically on ``vm create`` — no manual creation needed.
     """
     try:
-        with open("/etc/rc.conf") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("vm_dir="):
-                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    return val.startswith("zfs:")
-    except OSError:
-        pass
-    return False
+        p = subprocess.run(
+            ["/usr/sbin/sysrc", "-n", "vm_dir"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return p.returncode == 0 and p.stdout.strip().startswith("zfs:")
+    except Exception:
+        return False
 
 
 def _zfs_parent_for_vmdir():
