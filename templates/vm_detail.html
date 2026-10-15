@@ -339,7 +339,8 @@ Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> �
 
 <p>
   <a href="{{ url_for('storage') }}">📦 Snapshots &amp; Clone</a> ·
-  <a href="{{ url_for('vm_snapshots', name=v.name) }}">Snapshots for this VM</a>
+  <a href="{{ url_for('vm_snapshots', name=v.name) }}">Snapshots for this VM</a> ·
+  <a href="{{ url_for('vm_log', name=v.name) }}">📋 Logs</a>
 </p>
 
 <p><a href="{{ url_for('index') }}">&larr; back to dashboard</a></p>

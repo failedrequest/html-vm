@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Logs — {{ v.name }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Logs — {{ v.name }}</h1>
+  <a href="{{ url_for('vm_detail', name=v.name) }}" class="button">← VM detail</a>
+</div>
+
+{# ── Tab bar ─────────────────────────────────────────────────────────── #}
+<div class="tab-bar">
+  <a href="{{ url_for('vm_log', name=v.name, log='vm-bhyve.log', lines=lines) }}"
+     class="tab{{ ' active' if log == 'vm-bhyve.log' else '' }}">vm-bhyve.log</a>
+  {% if has_bhyve_log or log == 'bhyve.log' %}
+  <a href="{{ url_for('vm_log', name=v.name, log='bhyve.log', lines=lines) }}"
+     class="tab{{ ' active' if log == 'bhyve.log' else '' }}">bhyve.log</a>
+  {% else %}
+  <span class="tab disabled" title="bhyve.log is only written when debug=yes in VM conf">bhyve.log (not present)</span>
+  {% endif %}
+</div>
+
+{# ── Controls ────────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
+  <form method="get" action="{{ url_for('vm_log', name=v.name) }}" style="display:flex;gap:.4rem;align-items:center">
+    <input type="hidden" name="log" value="{{ log }}">
+    <label style="font-size:.85rem">Lines:</label>
+    <select name="lines" onchange="this.form.submit()" style="font-size:.85rem">
+      {% for n in [50, 100, 200, 500] %}
+      <option value="{{ n }}" {{ 'selected' if n == lines else '' }}>{{ n }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  <button id="btn-live" class="small primary" onclick="toggleLive()">▶ Go live</button>
+  <button id="btn-pause" class="small" onclick="pauseLive()" style="display:none">⏸ Pause</button>
+  <button id="btn-clear" class="small" onclick="clearLog()" style="display:none">✕ Clear</button>
+  <span id="live-badge" style="display:none;font-size:.78rem;color:var(--ok)">● live</span>
+  <span id="live-err"   style="display:none;font-size:.78rem;color:var(--bad)"></span>
+</div>
+
+{# ── Log output ───────────────────────────────────────────────────────── #}
+{% if err and not text %}
+  <div class="flash error">{{ err }}</div>
+{% endif %}
+
+<pre id="log-pre" class="log-pre">{{ text or '' }}</pre>
+
+<p class="note" id="static-note">
+  Showing last {{ lines }} lines of
+  <code>{{ v.name }}/{{ log }}</code>.
+  Click <strong>Go live</strong> to stream new lines as they arrive.
+  {% if log == 'bhyve.log' %}
+  <br>bhyve.log is written only when <code>debug=yes</code> is set in the VM conf.
+  {% endif %}
+</p>
+
+<script>
+var logPre   = document.getElementById('log-pre');
+var btnLive  = document.getElementById('btn-live');
+var btnPause = document.getElementById('btn-pause');
+var btnClear = document.getElementById('btn-clear');
+var badge    = document.getElementById('live-badge');
+var errSpan  = document.getElementById('live-err');
+var note     = document.getElementById('static-note');
+
+var es       = null;
+var paused   = false;
+var autoScroll = true;
+
+var STREAM_URL = "{{ url_for('vm_log_stream', name=v.name, log=log) }}";
+
+/* Scroll to bottom whenever content grows, unless user scrolled up */
+logPre.addEventListener('scroll', function() {
+  autoScroll = (logPre.scrollTop + logPre.clientHeight >= logPre.scrollHeight - 20);
+});
+
+function scrollBottom() {
+  if (autoScroll) logPre.scrollTop = logPre.scrollHeight;
+}
+
+/* Start at bottom of static content */
+scrollBottom();
+
+function toggleLive() {
+  if (es) return;
+  errSpan.style.display = 'none';
+  logPre.textContent = '';   /* clear static snapshot — live feed starts fresh */
+  note.style.display = 'none';
+
+  es = new EventSource(STREAM_URL);
+
+  es.onopen = function() {
+    badge.style.display = '';
+    btnLive.style.display  = 'none';
+    btnPause.style.display = '';
+    btnClear.style.display = '';
+  };
+
+  es.onmessage = function(e) {
+    if (paused) return;
+    logPre.textContent += e.data + '\n';
+    scrollBottom();
+  };
+
+  es.onerror = function() {
+    badge.style.display = 'none';
+    errSpan.textContent = 'Stream lost — reconnecting…';
+    errSpan.style.display = '';
+    /* EventSource reconnects automatically; clear message on next open */
+    es.addEventListener('open', function() {
+      errSpan.style.display = 'none';
+      badge.style.display = '';
+    }, { once: true });
+  };
+}
+
+function pauseLive() {
+  paused = !paused;
+  btnPause.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  badge.style.display  = paused ? 'none' : '';
+}
+
+function clearLog() {
+  logPre.textContent = '';
+}
+
+/* Auto-start live stream if VM is running */
+{% if v.running %}
+window.addEventListener('DOMContentLoaded', function() { toggleLive(); });
+{% endif %}
+</script>
+{% endblock %}

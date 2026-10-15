@@ -913,6 +913,67 @@ def migrate_start():
     return redirect(url_for("migrate"))
 
 
+# --------------------------------------------------------------------------
+# VM logs
+# --------------------------------------------------------------------------
+
+@app.route("/vm/<name>/log")
+@login_required
+def vm_log(name):
+    name = _vm_name_or_404(name)
+    vms, _ = vm.list_vms()
+    target = vm.vm_detail(name, vms)
+    if target is None:
+        flash("VM '{0}' not found".format(name), "error")
+        return redirect(url_for("index"))
+    log = request.args.get("log", "vm-bhyve.log")
+    if log not in ("vm-bhyve.log", "bhyve.log"):
+        log = "vm-bhyve.log"
+    try:
+        lines = max(10, min(500, int(request.args.get("lines", 100))))
+    except (TypeError, ValueError):
+        lines = 100
+    text, err = vm.read_vm_log_tail(name, log=log, lines=lines)
+    has_bhyve_log = vm.vm_log_exists(name, "bhyve.log")
+    return render_template("vm_log.html", v=target, log=log, lines=lines,
+                           text=text, err=err, has_bhyve_log=has_bhyve_log)
+
+
+@app.route("/vm/<name>/log/stream")
+@login_required
+def vm_log_stream(name):
+    """Server-Sent Events stream of a VM log file via tail -f."""
+    name = _vm_name_or_404(name)
+    log = request.args.get("log", "vm-bhyve.log")
+    if log not in ("vm-bhyve.log", "bhyve.log"):
+        log = "vm-bhyve.log"
+    log_path = vm.vm_log_path(name, log)
+
+    import subprocess as _sp
+
+    def generate():
+        if not os.path.exists(log_path):
+            yield "data: (log file not found: {0})\n\n".format(log_path)
+            return
+        proc = _sp.Popen(
+            ["tail", "-n", "100", "-f", log_path],
+            stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+        )
+        try:
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace").rstrip()
+                yield "data: {0}\n\n".format(line)
+        finally:
+            proc.terminate()
+            proc.wait()
+
+    return app.response_class(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.errorhandler(403)
 def forbidden(e):
     return render_template("error.html", code=403,

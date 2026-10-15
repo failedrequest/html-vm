@@ -1557,6 +1557,38 @@ def list_host_interfaces():
 
 
 
+# ── VM log helpers ──────────────────────────────────────────────────────────
+
+def vm_log_path(name, log="vm-bhyve.log"):
+    """Return the path to a VM log file.
+
+    log="vm-bhyve.log"  — vm-bhyve event log (always written)
+    log="bhyve.log"     — raw bhyve output (only when debug=yes in conf)
+    """
+    return os.path.join(VM_DATASTORE, name, log)
+
+
+def read_vm_log_tail(name, log="vm-bhyve.log", lines=100):
+    """Return the last *lines* lines of a VM log file.
+
+    Returns (text, error).  text is None when the file doesn't exist.
+    """
+    if not valid_name(name):
+        return None, "invalid vm name"
+    path = vm_log_path(name, log)
+    if not os.path.exists(path):
+        return None, "log file not found: {0}".format(path)
+    out, rc = _exec(["tail", "-n", str(lines), path], timeout=5)
+    if rc != 0:
+        return None, out.strip() or "tail failed"
+    return out, None
+
+
+def vm_log_exists(name, log="vm-bhyve.log"):
+    """Return True if the named log file exists for VM *name*."""
+    return os.path.exists(vm_log_path(name, log))
+
+
 # ── ISO management ──────────────────────────────────────────────────────────
 
 def list_isos():
