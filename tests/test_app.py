@@ -1235,5 +1235,176 @@ class RenameStopAllRouteTests(unittest.TestCase):
         self.assertIn(b"required", resp.data.lower())
 
 
+# ---------------------------------------------------------------------------
+# Switch config routes
+# ---------------------------------------------------------------------------
+
+class SwitchConfigRouteTests(unittest.TestCase):
+
+    def setUp(self):
+        app.config["TESTING"] = True
+        self.client = app.test_client()
+        _login(self.client)
+        self._sw = {
+            "name": "public", "type": "standard", "iface": "vm-public",
+            "address": "", "private": "no", "mtu": "1500", "vlan": "0",
+            "ports": ["em0"],
+        }
+
+    def _sw_mocks(self, extra=None):
+        patches = {
+            "app.vm.list_switches": ([self._sw], None),
+            "app.vm.list_host_interfaces": ["em0", "em1"],
+        }
+        if extra:
+            patches.update(extra)
+        return patches
+
+    # ── network_configure GET ─────────────────────────────────────────────
+
+    def test_configure_get_200(self):
+        with patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.get("/network/public/configure")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"public", resp.data)
+
+    def test_configure_unknown_switch_redirects(self):
+        with patch("app.vm.list_switches", return_value=([], None)), \
+             patch("app.vm.list_host_interfaces", return_value=[]):
+            resp = self.client.get("/network/public/configure",
+                                   follow_redirects=False)
+        self.assertEqual(resp.status_code, 302)
+
+    # ── network_add_iface ─────────────────────────────────────────────────
+
+    def test_add_iface_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_add_iface", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/add-iface",
+                                    data={"csrf_token": csrf, "iface": "em1"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", "em1")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_add_iface_missing(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/add-iface",
+                                    data={"csrf_token": csrf, "iface": ""},
+                                    follow_redirects=True)
+        self.assertIn(b"required", resp.data.lower())
+
+    # ── network_remove_iface ──────────────────────────────────────────────
+
+    def test_remove_iface_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_remove_iface", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/remove-iface",
+                                    data={"csrf_token": csrf, "iface": "em0"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", "em0")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_remove_iface_missing(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/remove-iface",
+                                    data={"csrf_token": csrf, "iface": ""},
+                                    follow_redirects=True)
+        self.assertIn(b"required", resp.data.lower())
+
+    # ── network_set_vlan ──────────────────────────────────────────────────
+
+    def test_set_vlan_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_vlan", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/vlan",
+                                    data={"csrf_token": csrf, "vlan_id": "100"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", "100")
+        self.assertEqual(resp.status_code, 200)
+
+    # ── network_set_nat ───────────────────────────────────────────────────
+
+    def test_set_nat_on(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_nat", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/nat",
+                                    data={"csrf_token": csrf, "nat": "on"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", True)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_set_nat_off(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_nat", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/nat",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", False)
+        self.assertEqual(resp.status_code, 200)
+
+    # ── network_set_address ───────────────────────────────────────────────
+
+    def test_set_address_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_address", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/address",
+                                    data={"csrf_token": csrf, "address": "10.0.0.1/24"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", "10.0.0.1/24")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_set_address_clear(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_address", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/address",
+                                    data={"csrf_token": csrf, "address": ""},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", "none")
+        self.assertEqual(resp.status_code, 200)
+
+    # ── network_set_private ───────────────────────────────────────────────
+
+    def test_set_private_on(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_private", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/private",
+                                    data={"csrf_token": csrf, "private": "on"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", True)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_set_private_off(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.switch_set_private", return_value=("", 0)) as m, \
+             patch("app.vm.list_switches", return_value=([self._sw], None)), \
+             patch("app.vm.list_host_interfaces", return_value=["em0"]):
+            resp = self.client.post("/network/public/private",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with("public", False)
+        self.assertEqual(resp.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

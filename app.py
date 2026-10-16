@@ -509,6 +509,73 @@ def network_delete(name):
     return redirect(url_for("networks"))
 
 
+@app.route("/network/<name>/configure")
+@login_required
+def network_configure(name):
+    sw, _ = vm.list_switches()
+    target = next((s for s in sw if s["name"] == name), None)
+    if target is None:
+        flash("Switch '{0}' not found".format(name), "error")
+        return redirect(url_for("networks"))
+    host_ifaces = vm.list_host_interfaces()
+    return render_template("network_switch.html", s=target,
+                           host_ifaces=host_ifaces)
+
+
+@app.route("/network/<name>/add-iface", methods=["POST"])
+@login_required
+def network_add_iface(name):
+    iface = (request.form.get("iface") or "").strip()
+    if not iface:
+        flash("Interface name required", "error")
+        return redirect(url_for("network_configure", name=name))
+    _flash_result("Add interface", vm.switch_add_iface(name, iface))
+    return redirect(url_for("network_configure", name=name))
+
+
+@app.route("/network/<name>/remove-iface", methods=["POST"])
+@login_required
+def network_remove_iface(name):
+    iface = (request.form.get("iface") or "").strip()
+    if not iface:
+        flash("Interface name required", "error")
+        return redirect(url_for("network_configure", name=name))
+    _flash_result("Remove interface", vm.switch_remove_iface(name, iface))
+    return redirect(url_for("network_configure", name=name))
+
+
+@app.route("/network/<name>/vlan", methods=["POST"])
+@login_required
+def network_set_vlan(name):
+    vlan_id = (request.form.get("vlan_id") or "0").strip()
+    _flash_result("Set VLAN", vm.switch_set_vlan(name, vlan_id))
+    return redirect(url_for("network_configure", name=name))
+
+
+@app.route("/network/<name>/nat", methods=["POST"])
+@login_required
+def network_set_nat(name):
+    enabled = request.form.get("nat") == "on"
+    _flash_result("Set NAT", vm.switch_set_nat(name, enabled))
+    return redirect(url_for("network_configure", name=name))
+
+
+@app.route("/network/<name>/address", methods=["POST"])
+@login_required
+def network_set_address(name):
+    address = (request.form.get("address") or "none").strip() or "none"
+    _flash_result("Set address", vm.switch_set_address(name, address))
+    return redirect(url_for("network_configure", name=name))
+
+
+@app.route("/network/<name>/private", methods=["POST"])
+@login_required
+def network_set_private(name):
+    enabled = request.form.get("private") == "on"
+    _flash_result("Set private", vm.switch_set_private(name, enabled))
+    return redirect(url_for("network_configure", name=name))
+
+
 # --------------------------------------------------------------------------
 # Tunnel management — VXLAN, GRE, IPsec
 # --------------------------------------------------------------------------

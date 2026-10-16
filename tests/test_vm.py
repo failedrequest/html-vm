@@ -1100,5 +1100,112 @@ class DiskNetConfTests(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class SwitchConfigTests(unittest.TestCase):
+    """Unit tests for switch_add/remove_iface and switch_set_* functions."""
+
+    def test_switch_add_iface_success(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            out, rc = vm.switch_add_iface("public", "em0")
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["switch", "add", "public", "em0"])
+
+    def test_switch_add_iface_bad_switch(self):
+        _, rc = vm.switch_add_iface("bad name!", "em0")
+        self.assertEqual(rc, 1)
+
+    def test_switch_add_iface_bad_iface(self):
+        _, rc = vm.switch_add_iface("public", "bad iface!")
+        self.assertEqual(rc, 1)
+
+    def test_switch_remove_iface_success(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            out, rc = vm.switch_remove_iface("public", "em0")
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["switch", "remove", "public", "em0"])
+
+    def test_switch_remove_iface_bad_switch(self):
+        _, rc = vm.switch_remove_iface("bad!!", "em0")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_vlan_success(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            out, rc = vm.switch_set_vlan("public", "100")
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["switch", "vlan", "public", "100"])
+
+    def test_switch_set_vlan_zero(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_vlan("public", "0")
+        m.assert_called_once_with(["switch", "vlan", "public", "0"])
+
+    def test_switch_set_vlan_out_of_range(self):
+        _, rc = vm.switch_set_vlan("public", "4095")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_vlan_bad_value(self):
+        _, rc = vm.switch_set_vlan("public", "notanint")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_vlan_bad_switch(self):
+        _, rc = vm.switch_set_vlan("bad!!", "100")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_nat_on(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_nat("public", True)
+        m.assert_called_once_with(["switch", "nat", "public", "on"])
+
+    def test_switch_set_nat_off(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_nat("public", False)
+        m.assert_called_once_with(["switch", "nat", "public", "off"])
+
+    def test_switch_set_nat_bad_switch(self):
+        _, rc = vm.switch_set_nat("bad!!", True)
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_address_cidr(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_address("public", "192.168.1.1/24")
+        m.assert_called_once_with(["switch", "address", "public", "192.168.1.1/24"])
+
+    def test_switch_set_address_none(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_address("public", "none")
+        m.assert_called_once_with(["switch", "address", "public", "none"])
+
+    def test_switch_set_address_bad_value(self):
+        _, rc = vm.switch_set_address("public", "not-an-ip")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_address_bad_switch(self):
+        _, rc = vm.switch_set_address("bad!!", "10.0.0.1/24")
+        self.assertEqual(rc, 1)
+
+    def test_switch_set_private_on(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_private("public", True)
+        m.assert_called_once_with(["switch", "private", "public", "on"])
+
+    def test_switch_set_private_off(self):
+        from unittest.mock import patch
+        with patch("vm.run", return_value=("", 0)) as m:
+            vm.switch_set_private("public", False)
+        m.assert_called_once_with(["switch", "private", "public", "off"])
+
+    def test_switch_set_private_bad_switch(self):
+        _, rc = vm.switch_set_private("bad!!", True)
+        self.assertEqual(rc, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

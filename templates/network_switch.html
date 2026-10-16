@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Switch {{ s.name }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>Switch — {{ s.name }}</h1>
+  <a href="{{ url_for('networks') }}" class="button">← Networks</a>
+</div>
+
+<table class="kv">
+  <tr><th>Type</th><td>{{ s.type or 'standard' }}</td></tr>
+  <tr><th>Bridge</th><td class="mono">{{ s.iface or '—' }}</td></tr>
+  <tr><th>Address</th><td class="mono">{{ s.address or '—' }}</td></tr>
+  <tr><th>Private</th><td>{{ s.private or 'no' }}</td></tr>
+  <tr><th>MTU</th><td>{{ s.mtu or '—' }}</td></tr>
+  <tr><th>VLAN</th><td>{{ s.vlan or '0' }}</td></tr>
+  <tr><th>Ports</th><td class="mono">{{ s.ports | join(', ') or '—' }}</td></tr>
+</table>
+
+<hr class="sect">
+
+{# ── Physical interfaces ─────────────────────────────────────────────── #}
+<h2>Physical interfaces</h2>
+<p class="note">Uplink ports attached to this bridge (the physical NICs that carry VM traffic).</p>
+
+{% if s.ports %}
+<table class="data">
+  <thead><tr><th>Interface</th><th></th></tr></thead>
+  <tbody>
+  {% for p in s.ports %}
+  <tr>
+    <td class="mono">{{ p }}</td>
+    <td>
+      <form method="post" action="{{ url_for('network_remove_iface', name=s.name) }}" class="inline"
+            onsubmit="return confirm('Remove {{ p }} from switch {{ s.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="iface" value="{{ p }}">
+        <button type="submit" class="small danger">Remove</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="dim">No physical interfaces attached.</p>
+{% endif %}
+
+<div class="card" style="margin-top:.75rem">
+  <form method="post" action="{{ url_for('network_add_iface', name=s.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="display:flex;gap:.5rem;align-items:flex-end">
+      <div style="flex:1">
+        <label>Add interface</label>
+        <select name="iface">
+          {% for i in host_ifaces %}
+          <option value="{{ i }}">{{ i }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="primary">Add</button>
+    </div>
+  </form>
+</div>
+
+<hr class="sect">
+
+{# ── VLAN ──────────────────────────────────────────────────────────────── #}
+<h2>VLAN</h2>
+<p class="note">802.1q VLAN ID for this switch. Set to 0 to disable.</p>
+<div class="card">
+  <form method="post" action="{{ url_for('network_set_vlan', name=s.name) }}"
+        style="display:flex;gap:.5rem;align-items:flex-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="flex:1">
+      <label>VLAN ID <span class="hint">(0 = off, 1–4094)</span></label>
+      <input type="number" name="vlan_id" value="{{ s.vlan or 0 }}" min="0" max="4094" required>
+    </div>
+    <button type="submit" class="primary">Set</button>
+  </form>
+</div>
+
+<hr class="sect">
+
+{# ── NAT ───────────────────────────────────────────────────────────────── #}
+<h2>NAT</h2>
+<p class="note">Source NAT lets VMs reach the internet without a physical uplink on this switch.</p>
+<div class="card" style="display:flex;gap:.75rem">
+  <form method="post" action="{{ url_for('network_set_nat', name=s.name) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="nat" value="on">
+    <button type="submit" class="primary small">Enable NAT</button>
+  </form>
+  <form method="post" action="{{ url_for('network_set_nat', name=s.name) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="nat" value="off">
+    <button type="submit" class="small">Disable NAT</button>
+  </form>
+</div>
+
+<hr class="sect">
+
+{# ── Gateway address ───────────────────────────────────────────────────── #}
+<h2>Gateway address</h2>
+<p class="note">Assigns an IP to the bridge interface — acts as the default gateway for VMs on this switch.</p>
+<div class="card">
+  <form method="post" action="{{ url_for('network_set_address', name=s.name) }}"
+        style="display:flex;gap:.5rem;align-items:flex-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="flex:1">
+      <label>Address <span class="hint">a.b.c.d/prefix — or leave blank to clear</span></label>
+      <input type="text" name="address" value="{{ s.address or '' }}"
+             placeholder="192.168.100.1/24">
+    </div>
+    <button type="submit" class="primary">Set</button>
+  </form>
+  {% if s.address %}
+  <form method="post" action="{{ url_for('network_set_address', name=s.name) }}"
+        class="inline" style="margin-top:.5rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="address" value="none">
+    <button type="submit" class="small danger">Clear address</button>
+  </form>
+  {% endif %}
+</div>
+
+<hr class="sect">
+
+{# ── Private mode ──────────────────────────────────────────────────────── #}
+<h2>Private mode</h2>
+<p class="note">When on, VMs on this switch cannot communicate with the host or other bridges.</p>
+<div class="card" style="display:flex;gap:.75rem">
+  <form method="post" action="{{ url_for('network_set_private', name=s.name) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="private" value="on">
+    <button type="submit" class="primary small">Enable private</button>
+  </form>
+  <form method="post" action="{{ url_for('network_set_private', name=s.name) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="private" value="off">
+    <button type="submit" class="small">Disable private</button>
+  </form>
+</div>
+
+<hr class="sect">
+
+{# ── Danger zone ───────────────────────────────────────────────────────── #}
+<h2>Delete switch</h2>
+<form method="post" action="{{ url_for('network_delete', name=s.name) }}"
+      onsubmit="return confirm('Delete switch {{ s.name }}? VMs using it will lose network connectivity.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="name" value="{{ s.name }}">
+  <button type="submit" class="danger">Delete {{ s.name }}</button>
+</form>
+
+{% endblock %}

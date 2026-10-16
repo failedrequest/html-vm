@@ -1201,27 +1201,6 @@ def delete_switch(name):
     return run(["switch", "destroy", name])
 
 
-def create_vxlan_switch(name, vni, iface):
-    """Create a vm-bhyve vxlan switch (type=vxlan).
-
-    vm-bhyve creates the vxlanN interface and a bridge, and manages lifecycle.
-    ``vni`` is the 24-bit VXLAN Network Identifier (1–16777215).
-    ``iface`` is the physical uplink (e.g. ``em0``).
-    Returns (output, rc).
-    """
-    if not SWITCH_NAME_RE.match(name):
-        return "error: invalid switch name", 1
-    try:
-        vni_int = int(vni)
-    except (ValueError, TypeError):
-        return "error: vni must be an integer", 1
-    if not (1 <= vni_int <= 16777215):
-        return "error: vni must be between 1 and 16777215", 1
-    if not _valid_iface(iface or ""):
-        return "error: invalid interface name", 1
-    return run(["switch", "create", "-t", "vxlan", "-i", iface, "-n", str(vni_int), name])
-
-
 # FreeBSD interface names: letters + digits + hyphens + underscores, start with letter
 IFACE_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9_-]*$')
 IP_RE    = re.compile(r'^(\d{1,3}\.){3}\d{1,3}$')
@@ -1241,6 +1220,81 @@ def _valid_cidr(s):
     if not m:
         return False
     return int(m.group(2)) <= 32
+
+
+def switch_add_iface(name, iface):
+    """Add a physical interface to a switch: vm switch add <name> <iface>."""
+    if not SWITCH_NAME_RE.match(name) or not _valid_iface(iface):
+        return "error: invalid switch or interface name", 1
+    return run(["switch", "add", name, iface])
+
+
+def switch_remove_iface(name, iface):
+    """Remove a physical interface from a switch: vm switch remove <name> <iface>."""
+    if not SWITCH_NAME_RE.match(name) or not _valid_iface(iface):
+        return "error: invalid switch or interface name", 1
+    return run(["switch", "remove", name, iface])
+
+
+def switch_set_vlan(name, vlan_id):
+    """Set VLAN ID on a switch (0 = off): vm switch vlan <name> <id>."""
+    if not SWITCH_NAME_RE.match(name):
+        return "error: invalid switch name", 1
+    try:
+        vid = int(vlan_id)
+    except (ValueError, TypeError):
+        return "error: vlan_id must be an integer", 1
+    if not (0 <= vid <= 4094):
+        return "error: vlan_id must be 0–4094", 1
+    return run(["switch", "vlan", name, str(vid)])
+
+
+def switch_set_nat(name, enabled):
+    """Enable or disable NAT on a switch: vm switch nat <name> on|off."""
+    if not SWITCH_NAME_RE.match(name):
+        return "error: invalid switch name", 1
+    return run(["switch", "nat", name, "on" if enabled else "off"])
+
+
+def switch_set_address(name, cidr):
+    """Set or clear the IP address on a switch bridge.
+
+    cidr is "a.b.c.d/prefix" or "none".
+    vm switch address <name> <cidr|none>
+    """
+    if not SWITCH_NAME_RE.match(name):
+        return "error: invalid switch name", 1
+    if cidr != "none" and not _valid_cidr(cidr):
+        return "error: address must be a.b.c.d/prefix or 'none'", 1
+    return run(["switch", "address", name, cidr])
+
+
+def switch_set_private(name, enabled):
+    """Toggle private mode on a switch: vm switch private <name> on|off."""
+    if not SWITCH_NAME_RE.match(name):
+        return "error: invalid switch name", 1
+    return run(["switch", "private", name, "on" if enabled else "off"])
+
+
+def create_vxlan_switch(name, vni, iface):
+    """Create a vm-bhyve vxlan switch (type=vxlan).
+
+    vm-bhyve creates the vxlanN interface and a bridge, and manages lifecycle.
+    ``vni`` is the 24-bit VXLAN Network Identifier (1–16777215).
+    ``iface`` is the physical uplink (e.g. ``em0``).
+    Returns (output, rc).
+    """
+    if not SWITCH_NAME_RE.match(name):
+        return "error: invalid switch name", 1
+    try:
+        vni_int = int(vni)
+    except (ValueError, TypeError):
+        return "error: vni must be an integer", 1
+    if not (1 <= vni_int <= 16777215):
+        return "error: vni must be between 1 and 16777215", 1
+    if not _valid_iface(iface or ""):
+        return "error: invalid interface name", 1
+    return run(["switch", "create", "-t", "vxlan", "-i", iface, "-n", str(vni_int), name])
 
 
 def kld_load(module):
