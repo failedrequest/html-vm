@@ -65,18 +65,37 @@
 <hr class="sect">
 
 {# ── VLAN ──────────────────────────────────────────────────────────────── #}
-<h2>VLAN</h2>
-<p class="note">802.1q VLAN ID for this switch. Set to 0 to disable.</p>
+<h2>VLAN (uplink tag)</h2>
+<p class="note">
+  Sets an 802.1q tag on the <strong>uplink (physical) ports</strong> of this switch.
+  VM tap interfaces on the bridge remain <em>untagged</em> — traffic between VMs on
+  this switch travels as plain Ethernet.  Only traffic leaving via the physical uplink
+  is tagged with this VLAN ID.
+</p>
+<p class="note">
+  <strong>Multiple VLANs:</strong> to place VMs on different VLANs, create one switch
+  per VLAN (e.g. <em>vlan136</em>, <em>vlan33</em>) each with the same trunk uplink
+  (<em>re0</em>) and a different VLAN ID.  VMs connected to <em>vlan136</em> get tag
+  136 on egress; VMs on <em>vlan33</em> get tag 33.  The uplink port on the switch
+  (e.g. <em>re0</em>) must be a trunk that accepts all relevant tags.
+</p>
 <div class="card">
   <form method="post" action="{{ url_for('network_set_vlan', name=s.name) }}"
         style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field" style="flex:1">
-      <label>VLAN ID <span class="hint">(0 = off, 1–4094)</span></label>
+      <label>VLAN ID <span class="hint">(0 = disabled, 1–4094)</span></label>
       <input type="number" name="vlan_id" value="{{ s.vlan or 0 }}" min="0" max="4094" required>
     </div>
     <button type="submit" class="primary">Set</button>
   </form>
+  {% if s.vlan and s.vlan != '0' %}
+  <p class="note" style="margin-top:.5rem">
+    Current: uplink tagged as VLAN <strong>{{ s.vlan }}</strong>
+    (physical ports become <code>{{ s.ports | join('.'+s.vlan+', ') }}{{ '.'+s.vlan if s.ports else '' }}</code>).
+    Set to 0 to remove VLAN tagging.
+  </p>
+  {% endif %}
 </div>
 
 <hr class="sect">

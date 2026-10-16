@@ -30,11 +30,17 @@
 
 <h3 class="sect-hdr">Create standard switch</h3>
 <div class="card">
+  <p class="note">
+    Each switch is a bridge. To isolate VMs on different VLANs, create one switch per VLAN
+    (e.g. <em>vlan136</em>, <em>vlan33</em>), attach the same trunk uplink to each, then
+    set the VLAN ID via the switch's configure page. VMs on the same switch share a broadcast
+    domain and are untagged; only the uplink port is tagged.
+  </p>
   <form method="post" action="{{ url_for('networks') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field"><label>Name</label>
       <input type="text" name="name" required pattern="[a-z0-9][a-z0-9._-]*[a-z0-9]"
-             placeholder="e.g. public">
+             placeholder="e.g. vlan136">
     </div>
     <label class="check"><input type="checkbox" name="private" value="1"> Private (no NAT)</label>
     <button type="submit" class="primary">Create switch</button>
