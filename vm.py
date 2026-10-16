@@ -1632,6 +1632,9 @@ def host_info():
         "datastore_total_human": None,
         "datastore_avail_human": None,
         "datastore_used_human": None,
+        "freebsd_version": None,
+        "vmbhyve_version": None,
+        "uptime": None,
     }
 
     # CPU count
@@ -1660,6 +1663,35 @@ def host_info():
         info["datastore_used_human"] = fmt_bytes(used)
     except OSError:
         pass
+
+    # FreeBSD version
+    out, rc = _exec(["uname", "-r"], timeout=5)
+    if rc == 0:
+        info["freebsd_version"] = out.strip()
+
+    # vm-bhyve version — `vm version` prints "vm-bhyve: ... vX.Y.Z"
+    out, rc = run(["version"])
+    if rc == 0:
+        m = re.search(r"v(\d+\.\d+[\w.]*)", out)
+        info["vmbhyve_version"] = m.group(1) if m else out.strip()
+
+    # System uptime via kern.boottime sysctl
+    # Output: "{ sec = 1234567890, usec = 0 } Fri Jan  1 00:00:00 2021"
+    out, rc = _exec(["sysctl", "-n", "kern.boottime"], timeout=5)
+    if rc == 0:
+        import time as _time
+        m = re.search(r"sec\s*=\s*(\d+)", out)
+        if m:
+            secs = int(_time.time()) - int(m.group(1))
+            days, rem = divmod(secs, 86400)
+            hrs,  rem = divmod(rem, 3600)
+            mins      = rem // 60
+            if days:
+                info["uptime"] = "{:d}d {:d}h {:d}m".format(days, hrs, mins)
+            elif hrs:
+                info["uptime"] = "{:d}h {:d}m".format(hrs, mins)
+            else:
+                info["uptime"] = "{:d}m".format(mins)
 
     return info
 

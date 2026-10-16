@@ -216,3 +216,7 @@ button.edit-btn.active { background: var(--link); color: #fff; border-color: var
 .tab:hover { color: var(--ink); background: var(--bg); }
 .tab.active { color: var(--ink); background: var(--panel); border-color: var(--border); font-weight: 600; }
 .tab.disabled { color: var(--muted); cursor: default; font-style: italic; }
+
+/* ── Host meta bar (dashboard) ────────────────────────────────────── */
+.host-meta { font-size: .82rem; color: var(--muted); margin: -.25rem 0 .9rem; }
+.host-meta .sep { margin: 0 .35rem; }

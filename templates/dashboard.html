@@ -22,6 +22,14 @@
 
 <p class="sub" id="vm-sub">{{ running }} of {{ vms|length }} VM(s) running.</p>
 
+<div class="host-meta">
+  <span>FreeBSD {{ host.freebsd_version or '—' }}</span>
+  <span class="sep">·</span>
+  <span>vm-bhyve {{ host.vmbhyve_version or '—' }}</span>
+  <span class="sep">·</span>
+  <span>up {{ host.uptime or '—' }}</span>
+</div>
+
 {# ── Host resource bars ─────────────────────────────────────────────── #}
 <div class="host-caps">
   <div class="cap-grid">
