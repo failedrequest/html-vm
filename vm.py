@@ -1664,8 +1664,8 @@ def host_info():
     except OSError:
         pass
 
-    # FreeBSD version
-    out, rc = _exec(["uname", "-r"], timeout=5)
+    # FreeBSD version + architecture
+    out, rc = _exec(["uname", "-rm"], timeout=5)
     if rc == 0:
         info["freebsd_version"] = out.strip()
 
