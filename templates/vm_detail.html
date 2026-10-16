@@ -3,6 +3,12 @@
 {% block content %}
 <div class="headrow">
   <h1>VM {{ v.name }}</h1>
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    {% if v.running %}
+    <a href="{{ url_for('vm_console', name=v.name) }}" class="button primary small">⌨ Console</a>
+    {% endif %}
+    <a href="{{ url_for('vm_log', name=v.name) }}" class="button small">📋 Logs</a>
+  </div>
 </div>
 
 <table class="kv">
@@ -17,6 +23,63 @@
   <tr><th>%CPU</th><td>{{ v.pcpu or '-' }}</td></tr>
   <tr><th>RSS</th><td>{{ v.rss_human or '-' }}</td></tr>
 </table>
+
+{# ────────────────── Lifecycle ────────────────── #}
+<h2>Power / lifecycle</h2>
+<div class="actions">
+  {% if not v.running %}
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='start') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="primary">Start</button>
+    </form>
+  {% else %}
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='stop') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="danger">Stop</button>
+    </form>
+    <form method="post" action="{{ url_for('vm_action', name=v.name, action='reboot') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button>Reboot</button>
+    </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='delete') }}" class="inline"
+        onsubmit="return confirm('Delete VM {{ v.name }}? Config and disks are removed.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Delete</button>
+  </form>
+</div>
+<p class="note">If delete reports <em>locked</em>, vm-bhyve found a stale
+  <code>run.lock</code> file. Use <strong>Remove lock file</strong> below, then delete again.
+  Manual fix: <code>rm {{ vm_datastore }}/{{ v.name }}/run.lock</code></p>
+
+<h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
+<div class="actions">
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-poweroff') }}" class="inline"
+        onsubmit="return confirm('Force power-off {{ v.name }}? Guest will NOT be notified.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Force power-off</button>
+  </form>
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-reset') }}" class="inline"
+        onsubmit="return confirm('Force reset {{ v.name }}? Guest will NOT be notified.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Force reset</button>
+  </form>
+  <form method="post" action="{{ url_for('vm_action', name=v.name, action='destroy-vmm') }}" class="inline"
+        onsubmit="return confirm('Destroy VMM context for {{ v.name }}? Use only for orphaned/stuck VMs.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Destroy VMM context</button>
+  </form>
+  <form method="post" action="{{ url_for('vm_unlock', name=v.name) }}" class="inline"
+        onsubmit="return confirm('Remove run.lock for {{ v.name }}? Only do this if the VM is not actually running.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Remove lock file</button>
+  </form>
+</div>
+<p class="note">Use only when normal stop fails. Force ops call <code>bhyvectl</code> directly — no graceful shutdown.
+Destroy VMM context releases the kernel VMM device for an orphaned guest.
+Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> — only use this when bhyve is no longer running.</p>
+
+<hr class="sect">
 
 {# ────────────────── Disks ────────────────── #}
 <h2>Disks</h2>
@@ -267,62 +330,6 @@
   <button type="submit" class="primary">Update</button>
 </form>
 
-{# ────────────────── Lifecycle ────────────────── #}
-<h2>Power / lifecycle</h2>
-<div class="actions">
-  {% if not v.running %}
-    <form method="post" action="{{ url_for('vm_action', name=v.name, action='start') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="primary">Start</button>
-    </form>
-  {% else %}
-    <a href="{{ url_for('vm_console', name=v.name) }}" class="button primary">⌨ Serial Console</a>
-    <form method="post" action="{{ url_for('vm_action', name=v.name, action='stop') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="danger">Stop</button>
-    </form>
-    <form method="post" action="{{ url_for('vm_action', name=v.name, action='reboot') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button>Reboot</button>
-    </form>
-  {% endif %}
-  <form method="post" action="{{ url_for('vm_action', name=v.name, action='delete') }}" class="inline"
-        onsubmit="return confirm('Delete VM {{ v.name }}? Config and disks are removed.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger">Delete</button>
-  </form>
-</div>
-<p class="note">If delete reports <em>locked</em>, vm-bhyve found a stale
-  <code>run.lock</code> file. Use <strong>Remove lock file</strong> below, then delete again.
-  Manual fix: <code>rm {{ vm_datastore }}/{{ v.name }}/run.lock</code></p>
-
-<h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
-<div class="actions">
-  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-poweroff') }}" class="inline"
-        onsubmit="return confirm('Force power-off {{ v.name }}? Guest will NOT be notified.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger">Force power-off</button>
-  </form>
-  <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-reset') }}" class="inline"
-        onsubmit="return confirm('Force reset {{ v.name }}? Guest will NOT be notified.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger">Force reset</button>
-  </form>
-  <form method="post" action="{{ url_for('vm_action', name=v.name, action='destroy-vmm') }}" class="inline"
-        onsubmit="return confirm('Destroy VMM context for {{ v.name }}? Use only for orphaned/stuck VMs.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger">Destroy VMM context</button>
-  </form>
-  <form method="post" action="{{ url_for('vm_unlock', name=v.name) }}" class="inline"
-        onsubmit="return confirm('Remove run.lock for {{ v.name }}? Only do this if the VM is not actually running.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger">Remove lock file</button>
-  </form>
-</div>
-<p class="note">Use only when normal stop fails. Force ops call <code>bhyvectl</code> directly — no graceful shutdown.
-Destroy VMM context releases the kernel VMM device for an orphaned guest.
-Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> — only use this when bhyve is no longer running.</p>
-
 {# ────────────────── Rename ────────────────── #}
 <h2>Rename VM <span class="hint">(VM must be stopped)</span></h2>
 <div class="card">
@@ -339,8 +346,7 @@ Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> �
 
 <p>
   <a href="{{ url_for('storage') }}">📦 Snapshots &amp; Clone</a> ·
-  <a href="{{ url_for('vm_snapshots', name=v.name) }}">Snapshots for this VM</a> ·
-  <a href="{{ url_for('vm_log', name=v.name) }}">📋 Logs</a>
+  <a href="{{ url_for('vm_snapshots', name=v.name) }}">Snapshots for this VM</a>
 </p>
 
 <p><a href="{{ url_for('index') }}">&larr; back to dashboard</a></p>
