@@ -20,17 +20,31 @@
 
 {% if vm_error %}<div class="flash error">{{ vm_error }}</div>{% endif %}
 
-<p class="sub" id="vm-sub">{{ running }} of {{ vms|length }} VM(s) running.</p>
+{# ── Health ──────────────────────────────────────────────────────────── #}
+<h2 class="section-hdr">Health</h2>
+<div class="host-caps">
+  <div class="cap-grid">
 
-<div class="host-meta">
-  <span>FreeBSD {{ host.freebsd_version or '—' }}</span>
-  <span class="sep">·</span>
-  <span>vm-bhyve {{ host.vmbhyve_version or '—' }}</span>
-  <span class="sep">·</span>
-  <span>up {{ host.uptime or '—' }}</span>
+    <div class="cap-item">
+      <div class="cap-label">FreeBSD</div>
+      <div class="cap-num stat">{{ host.freebsd_version or '—' }}</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">vm-bhyve</div>
+      <div class="cap-num stat">{{ host.vmbhyve_version or '—' }}</div>
+    </div>
+
+    <div class="cap-item">
+      <div class="cap-label">System uptime</div>
+      <div class="cap-num stat">{{ host.uptime or '—' }}</div>
+    </div>
+
+  </div>
 </div>
 
 {# ── Host resource bars ─────────────────────────────────────────────── #}
+<h2 class="section-hdr">Resources</h2>
 <div class="host-caps">
   <div class="cap-grid">
 
@@ -76,6 +90,9 @@
 
   </div>
 </div>
+
+<h2 class="section-hdr">Virtual Machines</h2>
+<p class="sub" id="vm-sub">{{ running }} of {{ vms|length }} VM(s) running.</p>
 
 <table class="data">
   <thead>

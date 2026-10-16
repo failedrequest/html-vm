@@ -217,6 +217,6 @@ button.edit-btn.active { background: var(--link); color: #fff; border-color: var
 .tab.active { color: var(--ink); background: var(--panel); border-color: var(--border); font-weight: 600; }
 .tab.disabled { color: var(--muted); cursor: default; font-style: italic; }
 
-/* ── Host meta bar (dashboard) ────────────────────────────────────── */
-.host-meta { font-size: .82rem; color: var(--muted); margin: -.25rem 0 .9rem; }
-.host-meta .sep { margin: 0 .35rem; }
+/* ── Dashboard section headers ───────────────────────────────────── */
+.section-hdr { font-size: .8rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); margin: 1.1rem 0 .4rem; }
