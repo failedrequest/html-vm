@@ -529,25 +529,25 @@ class FlashResultTests(unittest.TestCase):
 
 class SwitchNamesTests(unittest.TestCase):
 
-    def test_always_includes_default(self):
+    def test_empty_when_no_switches(self):
         with patch("app.vm.list_switches", return_value=([], None)):
             from app import _switch_names
             names = _switch_names()
-        self.assertIn("default", names)
+        self.assertEqual(names, [])
 
-    def test_existing_default_not_duplicated(self):
-        sw = [{"name": "default"}, {"name": "pub"}]
+    def test_returns_actual_switch_names(self):
+        sw = [{"name": "public"}, {"name": "vlan136"}]
         with patch("app.vm.list_switches", return_value=(sw, None)):
             from app import _switch_names
             names = _switch_names()
-        self.assertEqual(names.count("default"), 1)
+        self.assertEqual(names, ["public", "vlan136"])
 
-    def test_non_default_switch_included(self):
-        sw = [{"name": "pub"}]
+    def test_no_phantom_default_injected(self):
+        sw = [{"name": "public"}]
         with patch("app.vm.list_switches", return_value=(sw, None)):
             from app import _switch_names
             names = _switch_names()
-        self.assertIn("pub", names)
+        self.assertNotIn("default", names)
 
 
 # ---------------------------------------------------------------------------

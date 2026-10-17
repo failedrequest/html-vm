@@ -141,10 +141,7 @@ def _flash_result(label, result, _output=None):
 
 def _switch_names():
     sw, _ = vm.list_switches()
-    names = [s["name"] for s in sw]
-    if "default" not in names:
-        names.insert(0, "default")
-    return names
+    return [s["name"] for s in sw]
 
 
 # --------------------------------------------------------------------------

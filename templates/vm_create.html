@@ -90,8 +90,9 @@
       <div class="field">
         <label>Network switch</label>
         <select name="switch">
+          <option value="">— none —</option>
           {% for s in switches %}
-          <option value="{{ s }}" {{ 'selected' if s == 'default' else '' }}>{{ s }}</option>
+          <option value="{{ s }}">{{ s }}</option>
           {% endfor %}
         </select>
       </div>
