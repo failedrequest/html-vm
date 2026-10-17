@@ -60,6 +60,17 @@ Manage bhyve virtual machines from a browser — no command line required.
 - FreeBSD rc.d service script included
 - `install.sh` — idempotent installer (pkg + venv + rc.d)
 
+### Screenshots
+
+**Dashboard**
+<img width="1490" height="811" alt="dashboard" src="https://github.com/user-attachments/assets/85dd9398-1790-40e5-8a7b-a11b22f3ab71" />
+**Network**
+<img width="1490" height="2838" alt="network" src="https://github.com/user-attachments/assets/94bac269-ed6e-474c-9c36-e41aad977a81" />
+
+**VM Console**
+<img width="1490" height="865" alt="vm-console" src="https://github.com/user-attachments/assets/1aaea6a5-96e6-4a0b-8b72-03e7928df8db" />
+
+
 ---
 
 ## Requirements
