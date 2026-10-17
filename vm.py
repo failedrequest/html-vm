@@ -1115,7 +1115,10 @@ def create_vm(name, cpu, memory, size, switch=None, loader="bhyveload",
     if not valid_nic_type(nic_type):
         return "error: invalid nic type", 1
 
-    if zfs_dataset:
+    # When vm-bhyve itself is configured with a ZFS datastore (zfs:pool/ds),
+    # it creates the per-VM dataset automatically during `vm create`.
+    # Pre-creating it here would cause vm create to fail with "already exists".
+    if zfs_dataset and not vm_dir_uses_zfs():
         _, err = create_vm_zfs_dataset(name)
         if err:
             return "error creating ZFS dataset: " + err, 1
