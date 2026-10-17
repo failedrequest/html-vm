@@ -2025,11 +2025,14 @@ def vm_snapshots(name):
 
 
 def vm_snapshot(name, snap_name=None):
-    """Take a snapshot of VM *name*. Returns (output, rc)."""
+    """Take a snapshot of VM *name*. Returns (output, rc).
+
+    Always passes -f so running VMs can be snapshotted live.
+    """
     if not valid_name(name):
         return "error: invalid name", 1
     target = name if not snap_name else "{0}@{1}".format(name, snap_name)
-    return run(["snapshot", target])
+    return run(["snapshot", "-f", target])
 
 
 def vm_rollback(name, snap_name, force=False):
