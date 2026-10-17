@@ -161,7 +161,7 @@ etc/rc.d/html_vm    FreeBSD rc.d service script
 
 ## Platform notes
 
-- **FreeBSD 14 / 15** — no Linux assumptions anywhere; BSD userland only
+- **FreeBSD 14 / 15** —  BSD userland only
 - Valid loaders: `bhyveload` (FreeBSD), `uefi`, `uefi-csm` — `grub` is not installed
 - `vm_dir` is read from `sysrc -n vm_dir` at startup; handles `zfs:pool/dataset` prefix
 - ZFS snapshot/clone/migrate require `vm_dir="zfs:pool/dataset"` in `/etc/rc.conf`
