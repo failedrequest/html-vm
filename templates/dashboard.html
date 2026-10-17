@@ -103,7 +103,7 @@
       <td>{{ n.get('net_out_human', '-') }}</td>
       <td>
         {% if v.running %}
-          <a href="{{ url_for('vm_console', name=v.name) }}" class="button small">⌨</a>
+          <a href="{{ url_for('vm_console', name=v.name) }}" class="button small">cons</a>
         {% else %}
           <span class="dim">-</span>
         {% endif %}
