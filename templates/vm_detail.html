@@ -133,7 +133,7 @@ Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> �
             <select id="disk-path-src-{{ idx }}" onchange="diskPathSrc({{ idx }})">
               <option value="keep">Keep current path</option>
               <option value="manual">Type a path</option>
-              {% if isos %}<option value="iso">Pick an ISO</option>{% endif %}
+              {% if isos %}<option value="iso">Pick an install image</option>{% endif %}
             </select>
           </div>
 
@@ -143,9 +143,12 @@ Remove lock file deletes <code>{{ vm_datastore }}/{{ v.name }}/run.lock</code> �
           </div>
 
           {% if isos %}
-          <div class="field" id="disk-iso-{{ idx }}" style="display:none"><label>ISO image</label>
+          <div class="field" id="disk-iso-{{ idx }}" style="display:none">
+            <label>Install image
+              <span class="hint">(.iso → ahci-cd · .img memstick → ahci-hd)</span>
+            </label>
             <select id="disk-iso-sel-{{ idx }}" onchange="applyIso({{ idx }})">
-              <option value="">— select ISO —</option>
+              <option value="">— select —</option>
               {% for iso in isos %}
               <option value="{{ iso_dir }}/{{ iso }}">{{ iso }}</option>
               {% endfor %}
@@ -398,13 +401,21 @@ function diskPathSrc(idx) {
   }
 }
 
-/* Copy the selected ISO path into the hidden disk_name input */
+/* Copy the selected install image path into the hidden disk_name input.
+   Auto-select disk type: .img memstick -> ahci-hd, anything else -> ahci-cd */
+function _diskTypeForPath(path) {
+  return (path && path.toLowerCase().endsWith('.img')) ? 'ahci-hd' : 'ahci-cd';
+}
+
 function applyIso(idx) {
   var sel       = document.getElementById('disk-iso-sel-' + idx);
   var nameInput = document.getElementById('disk_name_' + idx);
   var devSel    = document.getElementById('disk_dev_' + idx);
-  if (nameInput && sel) nameInput.value = sel.value;
+  var typeSel   = document.querySelector('#disk-drawer-' + idx + ' select[name="disk_type"]');
+  if (!sel) return;
+  if (nameInput) nameInput.value = sel.value;
   if (devSel && sel.value) devSel.value = 'custom';
+  if (typeSel && sel.value) typeSel.value = _diskTypeForPath(sel.value);
 }
 </script>
 {% endblock %}
