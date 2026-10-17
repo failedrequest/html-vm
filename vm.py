@@ -2063,7 +2063,10 @@ def vm_delete_snapshot(name, snap_name):
     """Destroy a single snapshot via zfs destroy. Returns (output, rc)."""
     if not valid_name(name):
         return "error: invalid name", 1
-    full = "{0}@{1}".format(os.path.join(VM_DATASTORE, name), snap_name)
+    dataset = _vm_zfs_dataset(name)
+    if not dataset:
+        return "error: no ZFS dataset for '{0}'".format(name), 1
+    full = "{0}@{1}".format(dataset, snap_name)
     return _exec([_zfs_bin(), "destroy", full], timeout=30)
 
 
