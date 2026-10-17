@@ -101,7 +101,13 @@
       <td>{{ v.uptime or '-' }}</td>
       <td>{{ n.get('net_in_human', '-') }}</td>
       <td>{{ n.get('net_out_human', '-') }}</td>
-      <td><span class="dim">-</span></td>
+      <td>
+        {% if v.running %}
+          <a href="{{ url_for('vm_console', name=v.name) }}" class="button small">⌨</a>
+        {% else %}
+          <span class="dim">-</span>
+        {% endif %}
+      </td>
       <td class="right">
         {% if v.running %}
           <form method="post" action="{{ url_for('vm_action', name=v.name, action='stop') }}" class="inline">
