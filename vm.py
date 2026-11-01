@@ -762,6 +762,7 @@ class VncRegistry:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,   # new process group → kill whole tree
                 )
             except OSError as e:
                 return None, "failed to start websockify: {0}".format(e)
@@ -814,12 +815,25 @@ class VncRegistry:
 
     @staticmethod
     def _kill_proc(proc):
+        """Kill *proc* and its entire process group, then reap the zombie."""
+        import signal as _signal
         try:
-            proc.terminate()
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, _signal.SIGTERM)
+        except OSError:
+            # Process already gone or no permission — fall back to direct kill
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+        try:
             proc.wait(timeout=3)
         except Exception:
             try:
-                proc.kill()
+                os.killpg(os.getpgid(proc.pid), _signal.SIGKILL)
+            except OSError:
+                pass
+            try:
                 proc.wait(timeout=2)
             except Exception:
                 pass
