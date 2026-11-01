@@ -45,6 +45,12 @@ Manage bhyve virtual machines from a browser — no command line required.
 - **One-click enable for Windows VMs** — if `graphics` is not yet configured, the VNC page shows an *Enable VNC graphics* button that writes all required conf keys (`graphics`, `graphics_port`, `graphics_res`, `xhci_mouse`) directly into the VM conf and picks the next free VNC port automatically (≥ 5900, no conflicts with other VMs)
 - Websockify proxy runs per-VM on ports 19200–19299; bhyve VNC listener stays on its configured TCP port (59xx)
 - Console page accessible even when VM is stopped — shows a clear "start the VM first" message so you can still enable/configure VNC before booting
+- **Clean process teardown** — Stop VNC kills the entire websockify process group (SIGTERM → SIGKILL), leaving no orphan processes behind
+
+### Install from ISO
+- **Install from ISO** section on every VM detail page — pick an ISO from the dropdown, optional *Force stop first* (`-f`) checkbox, runs `vm install [-f] <name> <iso>`
+- VM boots directly into the installer; open the VNC console to interact with it
+- Falls back gracefully with a link to the ISO upload page when no ISOs are available
 
 ### ISO management
 - List, upload (XHR progress bar), delete
