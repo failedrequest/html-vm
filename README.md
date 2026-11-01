@@ -37,6 +37,15 @@ Manage bhyve virtual machines from a browser — no command line required.
 - In-browser terminal via [gotty](https://github.com/sorenisanerd/gotty) and nmdm devices
 - Console registry tracks active sessions; kill-stuck support
 
+### VNC graphics console
+- Full HTML5 VNC display embedded directly in the browser — no extra client required
+- Powered by [noVNC](https://novnc.com/) and [websockify](https://github.com/novnc/websockify)
+- **Auto-reconnect** — if the VM reboots inside the console, the connection restores automatically (3 s retry loop) without any page reload
+- **Scale to fit** — canvas always fills the console panel regardless of the VM's resolution
+- **One-click enable for Windows VMs** — if `graphics` is not yet configured, the VNC page shows an *Enable VNC graphics* button that writes all required conf keys (`graphics`, `graphics_port`, `graphics_res`, `xhci_mouse`) directly into the VM conf and picks the next free VNC port automatically (≥ 5900, no conflicts with other VMs)
+- Websockify proxy runs per-VM on ports 19200–19299; bhyve VNC listener stays on its configured TCP port (59xx)
+- Console page accessible even when VM is stopped — shows a clear "start the VM first" message so you can still enable/configure VNC before booting
+
 ### ISO management
 - List, upload (XHR progress bar), delete
 - Download from URL via `vm iso <url>`
@@ -78,8 +87,12 @@ Manage bhyve virtual machines from a browser — no command line required.
 - FreeBSD 14 or 15
 - [vm-bhyve](https://github.com/churchers/vm-bhyve) installed and initialized (`vm init`)
 - Python 3.12
-- `gotty` at `/usr/local/bin/gotty` (for serial console — `pkg install gotty`)
+- `gotty` at `/usr/local/bin/gotty` (serial console — `pkg install gotty`)
+- `websockify` at `/usr/local/bin/websockify` (VNC console — `pkg install py312-websockify`)
+- noVNC at `/usr/local/libexec/novnc/` (VNC console — `pkg install novnc`)
 - `setkey(8)` at `/sbin/setkey` (base system, for IPsec)
+
+All of the above are installed automatically by `install.sh`.
 
 Python packages (installed via `install.sh` or manually):
 
@@ -103,7 +116,7 @@ sudo sh install.sh
 ```
 
 The installer:
-- Installs pkg dependencies (Python 3.12, gevent-websocket, gotty, etc.)
+- Installs pkg dependencies (Python 3.12, gevent-websocket, gotty, websockify, novnc, etc.)
 - Creates `.venv` and pip-installs `flask-sock`
 - Symlinks `geventwebsocket` into `.venv`
 - Installs and enables the rc.d service
@@ -139,7 +152,7 @@ No hypervisor or root access required — all external I/O is mocked.
 .venv/bin/python -m unittest tests/test_vm.py tests/test_app.py -v
 ```
 
-Current: **260 tests — all pass**.
+Current: **291 tests — all pass**.
 
 ---
 
@@ -160,6 +173,7 @@ templates/          Jinja2 templates
   network_switch.html Per-switch config (interfaces, VLAN, NAT, address, private)
   vm_log.html         VM log viewer (SSE live stream + static tail)
   console.html        gotty iframe serial console
+  vnc_console.html    noVNC graphics console (embedded RFB, auto-reconnect)
   isos.html           ISO management
   storage.html        ZFS snapshots, clone, images
   migrate.html        VM migration
@@ -172,7 +186,7 @@ etc/rc.d/html_vm    FreeBSD rc.d service script
 
 ## Platform notes
 
-- **FreeBSD 14 / 15** —  BSD userland only
+- **FreeBSD 14 / 15** — BSD userland only
 - Valid loaders: `bhyveload` (FreeBSD), `uefi`, `uefi-csm` — `grub` is not installed
 - `vm_dir` is read from `sysrc -n vm_dir` at startup; handles `zfs:pool/dataset` prefix
 - ZFS snapshot/clone/migrate require `vm_dir="zfs:pool/dataset"` in `/etc/rc.conf`
@@ -180,6 +194,31 @@ etc/rc.d/html_vm    FreeBSD rc.d service script
 - nmdm device path: `console-ports` section of `vm info`, e.g. `/dev/nmdm-<name>.1B`
 - **Memstick `.img` files** must be attached as `ahci-hd`, not `ahci-cd` — the UI auto-selects this
 - **Multiple VLANs**: create one switch per VLAN, each with the same trunk uplink and a different VLAN ID
+
+## Windows VMs
+
+Windows guests require UEFI and a VNC graphics output — they have no serial console.
+
+### Setting up a new Windows VM
+
+1. **Create the VM** — use the *Windows* OS profile in the Create VM form. This selects `uefi` loader, `virtio-blk` disk, and `virtio-net` NIC automatically.
+2. **Enable VNC** — navigate to the VM detail page → *VNC console* → click **⚙ Enable VNC graphics**. This writes the following into the VM conf and picks a free port:
+   ```
+   graphics="yes"
+   graphics_port="59xx"   # auto-assigned, unique per VM
+   graphics_res="1280x720"
+   xhci_mouse="yes"
+   ```
+3. **Attach a Windows ISO** — add the ISO as an `ahci-cd` device in the Disks section.
+4. **Start the VM** — click Start on the VM detail page.
+5. **Open VNC** — return to *VNC console* → **▶ Start VNC console**. The Windows installer appears in the browser.
+6. **After install** — remove the ISO disk, reboot the VM. The VNC console auto-reconnects after the reboot without any page reload.
+
+### Notes
+- `xhci_mouse="yes"` gives accurate mouse tracking in the noVNC canvas without needing mouse capture.
+- VNC port range used by html-vm: 5900+ (one port per VM, auto-assigned with no conflicts).
+- Websockify proxy range: 19200–19299 (one port per active VNC session).
+- The VNC console page is reachable even when the VM is stopped so you can configure graphics before the first boot.
 
 ---
 
