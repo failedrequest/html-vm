@@ -1415,5 +1415,56 @@ class VncRegistryTests(unittest.TestCase):
         self.assertIn("invalid", msg)
 
 
+class InstallVmTests(unittest.TestCase):
+    """Unit tests for install_vm()."""
+
+    def test_install_bad_vm_name(self):
+        msg, rc = vm.install_vm("bad!!", "test.iso")
+        self.assertEqual(rc, 1)
+        self.assertIn("invalid virtual machine name", msg)
+
+    def test_install_bad_iso_name(self):
+        msg, rc = vm.install_vm("myvm", "../../etc/passwd")
+        self.assertEqual(rc, 1)
+        self.assertIn("invalid ISO filename", msg)
+
+    def test_install_iso_not_found(self):
+        from unittest.mock import patch
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vm.ISO_DIR", d):
+                msg, rc = vm.install_vm("myvm", "missing.iso")
+        self.assertEqual(rc, 1)
+        self.assertIn("ISO not found", msg)
+
+    def test_install_runs_command(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            iso_path = os.path.join(d, "test.iso")
+            open(iso_path, "w").close()
+            with patch("vm.ISO_DIR", d), \
+                 patch("vm.run", return_value=("ok", 0)) as m:
+                msg, rc = vm.install_vm("myvm", "test.iso")
+        self.assertEqual(rc, 0)
+        args = m.call_args[0][0]
+        self.assertEqual(args[0], "install")
+        self.assertIn("myvm", args)
+        self.assertIn(iso_path, args)
+        self.assertNotIn("-f", args)
+
+    def test_install_force_flag(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            iso_path = os.path.join(d, "test.iso")
+            open(iso_path, "w").close()
+            with patch("vm.ISO_DIR", d), \
+                 patch("vm.run", return_value=("ok", 0)) as m:
+                vm.install_vm("myvm", "test.iso", force=True)
+        args = m.call_args[0][0]
+        self.assertIn("-f", args)
+
+
 if __name__ == "__main__":
     unittest.main()

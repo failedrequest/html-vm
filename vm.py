@@ -1268,6 +1268,26 @@ def update_vm(name, cpu=None, memory=None, loader=None, utctime=None):
 
 # ── VM lifecycle ────────────────────────────────────────────────────────────
 
+def install_vm(name, iso, force=False):
+    """Run ``vm install [-f] <name> <iso_path>``.
+
+    *iso* is a bare filename (e.g. ``Windows11.iso``) found in ``ISO_DIR``.
+    Returns ``(output, rc)``.
+    """
+    if not valid_name(name):
+        return "error: invalid virtual machine name", 1
+    if not re.match(r'^[\w\-. ]+\.(iso|img)$', iso or "", re.IGNORECASE):
+        return "error: invalid ISO filename", 1
+    iso_path = os.path.join(ISO_DIR, iso)
+    if not os.path.isfile(iso_path):
+        return "error: ISO not found: {0}".format(iso), 1
+    args = ["install"]
+    if force:
+        args.append("-f")
+    args += [name, iso_path]
+    return run(args, timeout=120)
+
+
 def start_vm(name):
     if not valid_name(name):
         return "error: invalid name", 1

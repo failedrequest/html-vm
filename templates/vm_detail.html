@@ -64,6 +64,34 @@
   <code>run.lock</code> file. Use <strong>Remove lock file</strong> below, then delete again.
   Manual fix: <code>rm {{ vm_datastore }}/{{ v.name }}/run.lock</code></p>
 
+{# ────────────────── Install from ISO ────────────────── #}
+<h2>Install from ISO</h2>
+{% if isos %}
+<form method="post" action="{{ url_for('vm_install', name=v.name) }}" class="inline-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="form-row">
+    <label for="install-iso">ISO / image</label>
+    <select name="iso" id="install-iso">
+      {% for iso in isos %}
+      <option value="{{ iso }}">{{ iso }}</option>
+      {% endfor %}
+    </select>
+    <label style="margin-left:1rem">
+      <input type="checkbox" name="force" value="1">
+      Force stop first (<code>-f</code>)
+    </label>
+    <button class="primary" style="margin-left:1rem"
+            onclick="return confirm('Boot {{ v.name }} into the installer using the selected ISO?')">
+      ▶ Install
+    </button>
+  </div>
+</form>
+<p class="note">Runs <code>vm install [-f] {{ v.name }} &lt;iso&gt;</code>. The VM boots directly
+  into the installer. Open the VNC console to interact with it.</p>
+{% else %}
+<p class="note">No ISOs available. <a href="{{ url_for('isos') }}">Upload an ISO</a> first.</p>
+{% endif %}
+
 <h2>Force stop <span class="hint">(bhyvectl — no guest notification)</span></h2>
 <div class="actions">
   <form method="post" action="{{ url_for('vm_action', name=v.name, action='force-poweroff') }}" class="inline"

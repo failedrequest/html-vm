@@ -1564,5 +1564,40 @@ class VncRouteTests(unittest.TestCase):
         self.assertIn(b"error", resp.data.lower())
 
 
+class InstallRouteTests(unittest.TestCase):
+
+    def setUp(self):
+        app.config["TESTING"] = True
+        self.client = app.test_client()
+        _login(self.client)
+
+    def test_install_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.install_vm", return_value=("VM started", 0)) as m:
+            resp = self.client.post("/vm/myvm/install",
+                                    data={"csrf_token": csrf, "iso": "Win11.iso"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("myvm", "Win11.iso", force=False)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_install_force(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.install_vm", return_value=("VM started", 0)) as m:
+            resp = self.client.post("/vm/myvm/install",
+                                    data={"csrf_token": csrf, "iso": "Win11.iso",
+                                          "force": "1"},
+                                    follow_redirects=True)
+        m.assert_called_once_with("myvm", "Win11.iso", force=True)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_install_failure_flashes_error(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.install_vm", return_value=("error: ISO not found", 1)):
+            resp = self.client.post("/vm/myvm/install",
+                                    data={"csrf_token": csrf, "iso": "missing.iso"},
+                                    follow_redirects=True)
+        self.assertIn(b"error", resp.data.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

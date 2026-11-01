@@ -192,6 +192,16 @@ def vm_detail(name):
                            vm_datastore=vm.VM_DATASTORE)
 
 
+@app.route("/vm/<name>/install", methods=["POST"])
+@login_required
+def vm_install(name):
+    name = _vm_name_or_404(name)
+    iso   = (request.form.get("iso") or "").strip()
+    force = bool(request.form.get("force"))
+    _flash_result("Install", vm.install_vm(name, iso, force=force))
+    return redirect(url_for("vm_detail", name=name))
+
+
 @app.route("/vm/<name>/<action>", methods=["POST"])
 @login_required
 def vm_action(name, action):
