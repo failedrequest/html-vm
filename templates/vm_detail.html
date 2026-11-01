@@ -25,6 +25,17 @@
   <tr><th>RSS</th><td>{{ v.rss_human or '-' }}</td></tr>
 </table>
 
+{# ────────────────── Consoles ────────────────── #}
+<h2>Consoles</h2>
+<div class="actions">
+  {% if v.running %}
+  <a href="{{ url_for('vm_console', name=v.name) }}" class="button primary">⌨ Serial console</a>
+  <a href="{{ url_for('vm_vnc_console', name=v.name) }}" class="button primary">🖥 VNC console</a>
+  {% else %}
+  <p class="note">VM must be running to open a console.</p>
+  {% endif %}
+</div>
+
 {# ────────────────── Lifecycle ────────────────── #}
 <h2>Power / lifecycle</h2>
 <div class="actions">
