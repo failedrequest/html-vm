@@ -79,6 +79,8 @@ Manage bhyve virtual machines from a browser — no command line required.
 **VM Console**
 <img width="1490" height="865" alt="vm-console" src="https://github.com/user-attachments/assets/1aaea6a5-96e6-4a0b-8b72-03e7928df8db" />
 
+**VNC Console**
+<img width="1860" height="967" alt="Screenshot 2026-11-01 at 16-22-30 VNC — win0 · html-vm" src="https://github.com/user-attachments/assets/9a2cca73-17ce-4e4a-b175-e1ee057abf43" />
 
 ---
 
