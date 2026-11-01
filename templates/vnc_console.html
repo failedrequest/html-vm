@@ -48,20 +48,17 @@
 {% else %}
 {# ── no session yet ───────────────────────────────────────────────────── #}
 <div class="card">
-  {% if not graphics %}
+  {% if not graphics or not vnc_port %}
+  <p>VNC is not configured for <strong>{{ v.name }}</strong>.</p>
   <p class="note">
-    ⚠ Graphics is not enabled for <strong>{{ v.name }}</strong>.
-    Add the following to the VM's conf file to enable VNC:
+    Clicking the button below will write the required settings into the VM conf
+    and pick the next free VNC port automatically.
+    <strong>Restart the VM after enabling to activate VNC.</strong>
   </p>
-  <pre>graphics="yes"
-graphics_port="5901"
-graphics_res="1280x720"
-xhci_mouse="yes"</pre>
-  {% elif not vnc_port %}
-  <p class="note">
-    ⚠ <code>graphics="yes"</code> is set but no <code>graphics_port</code> was found.
-    Add <code>graphics_port="5901"</code> (unique per VM) to the VM conf, then restart the VM.
-  </p>
+  <form method="post" action="{{ url_for('vnc_enable', name=v.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="primary">⚙ Enable VNC graphics</button>
+  </form>
   {% else %}
   <p>No active VNC session for <strong>{{ v.name }}</strong>.</p>
   <p class="note">

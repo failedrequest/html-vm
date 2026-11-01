@@ -878,6 +878,50 @@ def vm_graphics_enabled(name):
 
 
 
+def _next_free_vnc_port():
+    """Return the lowest VNC port >= 5900 not already used by any VM conf."""
+    used = set()
+    try:
+        for entry in os.listdir(VM_DATASTORE):
+            cf = os.path.join(VM_DATASTORE, entry, entry + ".conf")
+            try:
+                with open(cf) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("graphics_port="):
+                            val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            if val.isdigit():
+                                used.add(int(val))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    port = 5900
+    while port in used:
+        port += 1
+    return port
+
+
+def vm_enable_graphics(name, res="1280x720"):
+    """Write graphics="yes", graphics_port, graphics_res, xhci_mouse into the
+    VM conf.  Picks the next free VNC port automatically.
+
+    Returns (msg, rc).
+    """
+    if not valid_name(name):
+        return "error: invalid virtual machine name", 1
+    lines, path, err = _load_conf_lines(name)
+    if err:
+        return "error: " + err, 1
+    port = _next_free_vnc_port()
+    lines = _conf_set(lines, "graphics", "yes")
+    lines = _conf_set(lines, "graphics_port", str(port))
+    lines = _conf_set(lines, "graphics_res", res)
+    lines = _conf_set(lines, "xhci_mouse", "yes")
+    _atomic_write(path, "\n".join(lines))
+    return "graphics enabled on VNC port {0} (restart VM to apply)".format(port), 0
+
+
 # ── Validators ──────────────────────────────────────────────────────────────
 
 def valid_name(name):

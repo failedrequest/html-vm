@@ -1438,7 +1438,7 @@ class VncRouteTests(unittest.TestCase):
             reg.get.return_value = None
             resp = self.client.get("/vm/gfxvm/vnc")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"Graphics is not enabled", resp.data)
+        self.assertIn(b"Enable VNC graphics", resp.data)
 
     def test_vnc_page_with_session(self):
         v = self._running_vm()
@@ -1540,6 +1540,23 @@ class VncRouteTests(unittest.TestCase):
         data = resp.get_json()
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["ws_port"], 19200)
+
+    def test_vnc_enable_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vm_enable_graphics", return_value=("graphics enabled on VNC port 5900 (restart VM to apply)", 0)) as m:
+            resp = self.client.post("/vm/gfxvm/vnc/enable",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        m.assert_called_once_with("gfxvm")
+        self.assertIn(b"5900", resp.data)
+
+    def test_vnc_enable_failure(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vm_enable_graphics", return_value=("error: could not locate config", 1)):
+            resp = self.client.post("/vm/gfxvm/vnc/enable",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        self.assertIn(b"error", resp.data.lower())
 
 
 if __name__ == "__main__":

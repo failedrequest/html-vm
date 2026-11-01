@@ -71,7 +71,9 @@ pkg install -y \
     vm-bhyve \
     edk2-bhyve \
     grub2-bhyve \
-    gotty
+    gotty \
+    py312-websockify \
+    novnc
 
 echo "    pkg packages OK"
 

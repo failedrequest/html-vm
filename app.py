@@ -423,6 +423,18 @@ def api_vnc():
     return jsonify(vm.vnc_registry.list_all())
 
 
+@app.route("/vm/<name>/vnc/enable", methods=["POST"])
+@login_required
+def vnc_enable(name):
+    name = _vm_name_or_404(name)
+    msg, rc = vm.vm_enable_graphics(name)
+    if rc == 0:
+        flash(msg, "ok")
+    else:
+        flash(msg, "error")
+    return redirect(url_for("vm_vnc_console", name=name))
+
+
 
 
 # --------------------------------------------------------------------------

@@ -1366,6 +1366,54 @@ class VncRegistryTests(unittest.TestCase):
                 port = vm.vm_vnc_port("novm")
         self.assertIsNone(port)
 
+    def test_next_free_vnc_port_no_vms(self):
+        from unittest.mock import patch
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vm.VM_DATASTORE", d):
+                port = vm._next_free_vnc_port()
+        self.assertEqual(port, 5900)
+
+    def test_next_free_vnc_port_skips_used(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            for vmname, gport in [("vm1", "5900"), ("vm2", "5901")]:
+                vmdir = os.path.join(d, vmname)
+                os.makedirs(vmdir)
+                with open(os.path.join(vmdir, vmname + ".conf"), "w") as f:
+                    f.write('graphics_port="{0}"\n'.format(gport))
+            with patch("vm.VM_DATASTORE", d):
+                port = vm._next_free_vnc_port()
+        self.assertEqual(port, 5902)
+
+    def test_vm_enable_graphics_writes_conf(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            vmname = "winvm"
+            vmdir = os.path.join(d, vmname)
+            os.makedirs(vmdir)
+            conf = os.path.join(vmdir, vmname + ".conf")
+            with open(conf, "w") as f:
+                f.write('loader="uefi"\ncpu="2"\nmemory="4G"\n')
+            with patch("vm.VM_DATASTORE", d), \
+                 patch("vm.conf_path", return_value=conf):
+                msg, rc = vm.vm_enable_graphics(vmname)
+            self.assertEqual(rc, 0)
+            self.assertIn("5900", msg)
+            with open(conf) as f:
+                content = f.read()
+            self.assertIn('graphics="yes"', content)
+            self.assertIn('graphics_port="5900"', content)
+            self.assertIn('graphics_res="1280x720"', content)
+            self.assertIn('xhci_mouse="yes"', content)
+
+    def test_vm_enable_graphics_bad_name(self):
+        msg, rc = vm.vm_enable_graphics("bad!!")
+        self.assertEqual(rc, 1)
+        self.assertIn("invalid", msg)
+
 
 if __name__ == "__main__":
     unittest.main()
