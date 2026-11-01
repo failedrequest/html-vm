@@ -695,6 +695,189 @@ class ConsoleRegistry:
 console_registry = ConsoleRegistry()
 
 
+# ── VNC graphics console via websockify + noVNC ─────────────────────────────
+
+WEBSOCKIFY_BIN    = "/usr/local/bin/websockify"
+NOVNC_DIR         = "/usr/local/libexec/novnc"
+_VNC_WS_PORT_START = 19200
+_VNC_WS_PORT_END   = 19299
+
+
+def _free_vnc_ws_port():
+    """Return the lowest free TCP port in the VNC websockify range."""
+    for port in range(_VNC_WS_PORT_START, _VNC_WS_PORT_END + 1):
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", port))
+            s.close()
+            return port
+        except OSError:
+            continue
+    return None
+
+
+class VncRegistry:
+    """Thread-safe registry of active websockify VNC proxy processes.
+
+    Each entry maps ``vm_name`` to::
+
+        {"ws_port": int, "vnc_port": int, "pid": int, "proc": Popen}
+
+    The registry is a module-level singleton accessed via
+    :data:`vnc_registry`.
+    """
+
+    def __init__(self):
+        self._lock  = threading.Lock()
+        self._conns = {}   # {vm_name: {"ws_port":, "vnc_port":, "pid":, "proc":}}
+
+    # ── public API ────────────────────────────────────────────────────────
+
+    def start(self, name, vnc_port):
+        """Start a websockify process for *name* proxying to *vnc_port*.
+
+        If a session already exists for *name* and the process is still
+        alive, returns the existing entry unchanged.
+        Returns ``(entry, error_str)``.  *entry* is None on failure.
+        """
+        with self._lock:
+            existing = self._conns.get(name)
+            if existing and existing["proc"].poll() is None:
+                return existing, None  # already running
+
+            ws_port = _free_vnc_ws_port()
+            if ws_port is None:
+                return None, "no free port in range {0}–{1}".format(
+                    _VNC_WS_PORT_START, _VNC_WS_PORT_END)
+
+            cmd = [
+                WEBSOCKIFY_BIN,
+                str(ws_port),
+                "127.0.0.1:{0}".format(vnc_port),
+            ]
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as e:
+                return None, "failed to start websockify: {0}".format(e)
+
+            entry = {"ws_port": ws_port, "vnc_port": vnc_port,
+                     "pid": proc.pid, "proc": proc}
+            self._conns[name] = entry
+            return entry, None
+
+    def stop(self, name):
+        """Kill the websockify process for *name*.  Returns (ok, msg)."""
+        with self._lock:
+            entry = self._conns.pop(name, None)
+        if entry is None:
+            return False, "no VNC session for '{0}'".format(name)
+        self._kill_proc(entry["proc"])
+        return True, "VNC console for '{0}' stopped".format(name)
+
+    def get(self, name):
+        """Return the entry dict for *name*, or None if not running."""
+        with self._lock:
+            entry = self._conns.get(name)
+            if entry and entry["proc"].poll() is not None:
+                del self._conns[name]
+                return None
+            return dict(entry) if entry else None
+
+    def list_all(self):
+        """Return a list of status dicts for all tracked VMs.
+
+        Each dict: ``{"name": str, "ws_port": int, "vnc_port": int,
+        "pid": int, "alive": bool}``.  Stale (exited) entries are pruned.
+        """
+        result = []
+        with self._lock:
+            stale = [n for n, e in self._conns.items() if e["proc"].poll() is not None]
+            for n in stale:
+                del self._conns[n]
+            for name, entry in self._conns.items():
+                result.append({
+                    "name":     name,
+                    "ws_port":  entry["ws_port"],
+                    "vnc_port": entry["vnc_port"],
+                    "pid":      entry["pid"],
+                    "alive":    True,
+                })
+        return result
+
+    # ── private ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _kill_proc(proc):
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+                proc.wait(timeout=2)
+            except Exception:
+                pass
+
+
+#: Module-level singleton — import this from app.py
+vnc_registry = VncRegistry()
+
+
+def vm_vnc_port(name):
+    """Return the VNC TCP port for *name*, or None if not configured.
+
+    Reads ``graphics_port`` from the VM's conf file first; falls back to
+    parsing ``vm info`` output.
+    """
+    conf_path = os.path.join(VM_DATASTORE, name, name + ".conf")
+    try:
+        with open(conf_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("graphics_port="):
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if val.isdigit():
+                        return int(val)
+    except OSError:
+        pass
+    # Fallback: parse vm info output
+    out, rc = run(["vm", "info", name])
+    if rc != 0:
+        return None
+    for line in out.splitlines():
+        line = line.strip()
+        if line.lower().startswith("vnc port") or line.lower().startswith("graphics port"):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                val = parts[1].strip()
+                if val.isdigit():
+                    return int(val)
+    return None
+
+
+def vm_graphics_enabled(name):
+    """Return True if *name* has graphics="yes" in its conf file."""
+    conf_path = os.path.join(VM_DATASTORE, name, name + ".conf")
+    try:
+        with open(conf_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("graphics="):
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    return val.lower() == "yes"
+    except OSError:
+        pass
+    return False
+
+
+
+
 # ── Validators ──────────────────────────────────────────────────────────────
 
 def valid_name(name):

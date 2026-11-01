@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}VNC — {{ v.name }}{% endblock %}
+{% block content %}
+<div class="headrow">
+  <h1>🖥 VNC Console — {{ v.name }}</h1>
+  <div>
+    <a href="{{ url_for('vm_detail', name=v.name) }}" class="button small">← VM detail</a>
+  </div>
+</div>
+
+{% if entry %}
+{# ── websockify session is running ────────────────────────────────────── #}
+<div class="console-meta card">
+  <div class="two-col">
+    <div>
+      <span class="cap-label">Session</span>
+      <span class="cap-num stat ok">● Active</span>
+    </div>
+    <div>
+      <span class="cap-label">PID</span>
+      <span class="cap-num mono">{{ entry.pid }}</span>
+    </div>
+    <div>
+      <span class="cap-label">VNC port</span>
+      <span class="cap-num mono">{{ entry.vnc_port }}</span>
+    </div>
+    <div>
+      <span class="cap-label">WebSocket port</span>
+      <span class="cap-num mono">{{ entry.ws_port }}</span>
+    </div>
+  </div>
+  <div class="actions" style="margin-top:.7rem">
+    <form method="post" action="{{ url_for('vnc_stop', name=v.name) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="small danger">Stop VNC</button>
+    </form>
+  </div>
+</div>
+
+<div id="console-wrap">
+  <iframe id="novnc-frame"
+          src="/novnc/vnc_lite.html?host={{ request.host.split(':')[0] }}&port={{ entry.ws_port }}&autoconnect=true"
+          allowfullscreen
+          title="VNC console for {{ v.name }}">
+  </iframe>
+</div>
+
+{% else %}
+{# ── no session yet ───────────────────────────────────────────────────── #}
+<div class="card">
+  {% if not graphics %}
+  <p class="note">
+    ⚠ Graphics is not enabled for <strong>{{ v.name }}</strong>.
+    Add the following to the VM's conf file to enable VNC:
+  </p>
+  <pre>graphics="yes"
+graphics_port="5901"
+graphics_res="1280x720"
+xhci_mouse="yes"</pre>
+  {% elif not vnc_port %}
+  <p class="note">
+    ⚠ <code>graphics="yes"</code> is set but no <code>graphics_port</code> was found.
+    Add <code>graphics_port="5901"</code> (unique per VM) to the VM conf, then restart the VM.
+  </p>
+  {% else %}
+  <p>No active VNC session for <strong>{{ v.name }}</strong>.</p>
+  <p class="note">
+    Starting VNC launches <code>websockify</code> on a WebSocket port that proxies
+    to the bhyve VNC listener on port <code>{{ vnc_port }}</code>.
+    noVNC connects in the iframe below.
+  </p>
+  <form method="post" action="{{ url_for('vnc_start', name=v.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="primary">▶ Start VNC console</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

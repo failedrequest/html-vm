@@ -6,6 +6,7 @@
   <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
     {% if v.running %}
     <a href="{{ url_for('vm_console', name=v.name) }}" class="button primary small">⌨ Console</a>
+    <a href="{{ url_for('vm_vnc_console', name=v.name) }}" class="button primary small">🖥 VNC</a>
     {% endif %}
     <a href="{{ url_for('vm_log', name=v.name) }}" class="button small">📋 Logs</a>
   </div>

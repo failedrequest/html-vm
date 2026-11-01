@@ -354,6 +354,78 @@ def api_consoles():
 
 
 # --------------------------------------------------------------------------
+# VNC graphics console (websockify + noVNC)
+# --------------------------------------------------------------------------
+
+@app.route("/novnc/<path:filename>")
+@login_required
+def novnc_static(filename):
+    from flask import send_from_directory
+    return send_from_directory(vm.NOVNC_DIR, filename)
+
+
+@app.route("/vm/<name>/vnc")
+@login_required
+def vm_vnc_console(name):
+    name = _vm_name_or_404(name)
+    vms, _ = vm.list_vms()
+    target = vm.vm_detail(name, vms)
+    if target is None:
+        flash("VM '{0}' not found".format(name), "error")
+        return redirect(url_for("index"))
+    if not target["running"]:
+        flash("VM must be running to open a VNC console", "error")
+        return redirect(url_for("vm_detail", name=name))
+    entry = vm.vnc_registry.get(name)
+    graphics = vm.vm_graphics_enabled(name)
+    vnc_port = vm.vm_vnc_port(name)
+    return render_template("vnc_console.html", v=target, entry=entry,
+                           graphics=graphics, vnc_port=vnc_port)
+
+
+@app.route("/vm/<name>/vnc/start", methods=["POST"])
+@login_required
+def vnc_start(name):
+    name = _vm_name_or_404(name)
+    vms, _ = vm.list_vms()
+    target = vm.vm_detail(name, vms)
+    if target is None or not target["running"]:
+        flash("VM must be running to start VNC", "error")
+        return redirect(url_for("vm_detail", name=name))
+    vnc_port = vm.vm_vnc_port(name)
+    if vnc_port is None:
+        flash("No VNC port configured — add graphics_port to VM conf", "error")
+        return redirect(url_for("vm_vnc_console", name=name))
+    entry, err = vm.vnc_registry.start(name, vnc_port)
+    if err:
+        flash("VNC start failed: " + err, "error")
+    else:
+        _time.sleep(0.4)   # give websockify a moment to bind
+        flash("VNC started on WebSocket port {0}".format(entry["ws_port"]), "ok")
+    return redirect(url_for("vm_vnc_console", name=name))
+
+
+@app.route("/vm/<name>/vnc/stop", methods=["POST"])
+@login_required
+def vnc_stop(name):
+    name = _vm_name_or_404(name)
+    ok, msg = vm.vnc_registry.stop(name)
+    if ok:
+        flash(msg, "ok")
+    else:
+        flash(msg, "error")
+    return redirect(url_for("vm_detail", name=name))
+
+
+@app.route("/api/vnc")
+@login_required
+def api_vnc():
+    return jsonify(vm.vnc_registry.list_all())
+
+
+
+
+# --------------------------------------------------------------------------
 # Create VM
 # --------------------------------------------------------------------------
 @app.route("/vm/create", methods=["GET", "POST"])

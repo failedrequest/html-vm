@@ -1207,5 +1207,165 @@ class SwitchConfigTests(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class VncRegistryTests(unittest.TestCase):
+    """Tests for VncRegistry — all Popen calls are mocked."""
+
+    def _make_proc(self, alive=True):
+        from unittest.mock import MagicMock
+        proc = MagicMock()
+        proc.pid = 54321
+        proc.poll.return_value = None if alive else 0
+        return proc
+
+    def setUp(self):
+        self.reg = vm.VncRegistry()
+
+    def test_start_returns_entry(self):
+        from unittest.mock import patch
+        proc = self._make_proc()
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", return_value=proc):
+            entry, err = self.reg.start("vm1", 5901)
+        self.assertIsNone(err)
+        self.assertEqual(entry["ws_port"], 19200)
+        self.assertEqual(entry["vnc_port"], 5901)
+        self.assertEqual(entry["pid"], 54321)
+
+    def test_start_reuses_alive_session(self):
+        from unittest.mock import patch
+        proc = self._make_proc()
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", return_value=proc) as mock_popen:
+            self.reg.start("vm1", 5901)
+            self.reg.start("vm1", 5901)
+        self.assertEqual(mock_popen.call_count, 1)
+
+    def test_start_restarts_dead_session(self):
+        from unittest.mock import patch
+        dead_proc = self._make_proc(alive=False)
+        live_proc = self._make_proc()
+        call_count = [0]
+        def popen_side(*a, **kw):
+            call_count[0] += 1
+            return dead_proc if call_count[0] == 1 else live_proc
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", side_effect=popen_side):
+            self.reg.start("vm1", 5901)
+            entry, err = self.reg.start("vm1", 5901)
+        self.assertIsNone(err)
+        self.assertEqual(call_count[0], 2)
+
+    def test_start_no_free_port(self):
+        from unittest.mock import patch
+        with patch("vm._free_vnc_ws_port", return_value=None):
+            entry, err = self.reg.start("vm1", 5901)
+        self.assertIsNone(entry)
+        self.assertIn("no free port", err)
+
+    def test_start_popen_failure(self):
+        from unittest.mock import patch
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", side_effect=OSError("not found")):
+            entry, err = self.reg.start("vm1", 5901)
+        self.assertIsNone(entry)
+        self.assertIn("failed to start", err)
+
+    def test_stop_existing(self):
+        from unittest.mock import patch
+        proc = self._make_proc()
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", return_value=proc):
+            self.reg.start("vm1", 5901)
+        ok, msg = self.reg.stop("vm1")
+        self.assertTrue(ok)
+        self.assertIn("vm1", msg)
+        self.assertIsNone(self.reg.get("vm1"))
+
+    def test_stop_missing(self):
+        ok, msg = self.reg.stop("noexist")
+        self.assertFalse(ok)
+        self.assertIn("no VNC session", msg)
+
+    def test_get_returns_none_for_exited(self):
+        from unittest.mock import patch
+        proc = self._make_proc(alive=False)
+        with patch("vm._free_vnc_ws_port", return_value=19200), \
+             patch("vm.subprocess.Popen", return_value=proc):
+            self.reg.start("vm1", 5901)
+        self.assertIsNone(self.reg.get("vm1"))
+
+    def test_list_all_prunes_dead(self):
+        from unittest.mock import patch
+        alive = self._make_proc(alive=True)
+        dead  = self._make_proc(alive=False)
+        with patch("vm._free_vnc_ws_port", side_effect=[19200, 19201]), \
+             patch("vm.subprocess.Popen", side_effect=[alive, dead]):
+            self.reg.start("live", 5901)
+            self.reg.start("dead", 5902)
+        result = self.reg.list_all()
+        names = [e["name"] for e in result]
+        self.assertIn("live", names)
+        self.assertNotIn("dead", names)
+
+    def test_free_vnc_ws_port_range(self):
+        port = vm._free_vnc_ws_port()
+        if port is not None:
+            self.assertGreaterEqual(port, vm._VNC_WS_PORT_START)
+            self.assertLessEqual(port, vm._VNC_WS_PORT_END)
+
+    def test_vm_graphics_enabled_true(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            vmname = "gfxvm"
+            vmdir = os.path.join(d, vmname)
+            os.makedirs(vmdir)
+            with open(os.path.join(vmdir, vmname + ".conf"), "w") as f:
+                f.write('graphics="yes"\ngraphics_port="5901"\n')
+            with patch("vm.VM_DATASTORE", d):
+                self.assertTrue(vm.vm_graphics_enabled(vmname))
+
+    def test_vm_graphics_enabled_false(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            vmname = "nogfxvm"
+            vmdir = os.path.join(d, vmname)
+            os.makedirs(vmdir)
+            with open(os.path.join(vmdir, vmname + ".conf"), "w") as f:
+                f.write('graphics="no"\n')
+            with patch("vm.VM_DATASTORE", d):
+                self.assertFalse(vm.vm_graphics_enabled(vmname))
+
+    def test_vm_graphics_enabled_missing_conf(self):
+        from unittest.mock import patch
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vm.VM_DATASTORE", d):
+                self.assertFalse(vm.vm_graphics_enabled("nonexistent"))
+
+    def test_vm_vnc_port_from_conf(self):
+        from unittest.mock import patch
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            vmname = "vncvm"
+            vmdir = os.path.join(d, vmname)
+            os.makedirs(vmdir)
+            with open(os.path.join(vmdir, vmname + ".conf"), "w") as f:
+                f.write('graphics="yes"\ngraphics_port="5901"\n')
+            with patch("vm.VM_DATASTORE", d):
+                port = vm.vm_vnc_port(vmname)
+        self.assertEqual(port, 5901)
+
+    def test_vm_vnc_port_missing_conf(self):
+        from unittest.mock import patch
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vm.VM_DATASTORE", d), \
+                 patch("vm.run", return_value=("", 1)):
+                port = vm.vm_vnc_port("novm")
+        self.assertIsNone(port)
+
+
 if __name__ == "__main__":
     unittest.main()

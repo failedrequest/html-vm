@@ -1406,5 +1406,141 @@ class SwitchConfigRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class VncRouteTests(unittest.TestCase):
+
+    def setUp(self):
+        app.config["TESTING"] = True
+        self.client = app.test_client()
+        _login(self.client)
+
+    def _running_vm(self, name="gfxvm"):
+        return _make_vm(name, running=True)
+
+    def test_vnc_page_no_session_graphics_enabled(self):
+        v = self._running_vm()
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app.vm.vm_graphics_enabled", return_value=True), \
+             patch("app.vm.vm_vnc_port", return_value=5901):
+            reg.get.return_value = None
+            resp = self.client.get("/vm/gfxvm/vnc")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Start VNC console", resp.data)
+
+    def test_vnc_page_no_graphics(self):
+        v = self._running_vm()
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app.vm.vm_graphics_enabled", return_value=False), \
+             patch("app.vm.vm_vnc_port", return_value=None):
+            reg.get.return_value = None
+            resp = self.client.get("/vm/gfxvm/vnc")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Graphics is not enabled", resp.data)
+
+    def test_vnc_page_with_session(self):
+        v = self._running_vm()
+        entry = {"ws_port": 19200, "vnc_port": 5901, "pid": 777}
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app.vm.vm_graphics_enabled", return_value=True), \
+             patch("app.vm.vm_vnc_port", return_value=5901):
+            reg.get.return_value = entry
+            resp = self.client.get("/vm/gfxvm/vnc")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"19200", resp.data)
+        self.assertIn(b"Active", resp.data)
+
+    def test_vnc_page_stopped_vm_redirects(self):
+        v = _make_vm("stopped", running=False)
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v):
+            resp = self.client.get("/vm/stopped/vnc", follow_redirects=False)
+        self.assertEqual(resp.status_code, 302)
+
+    def test_vnc_start_success(self):
+        v = self._running_vm()
+        csrf = _csrf(self.client)
+        entry = {"ws_port": 19200, "vnc_port": 5901, "pid": 777, "proc": None}
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vm_vnc_port", return_value=5901), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app._time.sleep"):
+            reg.start.return_value = (entry, None)
+            reg.get.return_value = entry
+            resp = self.client.post("/vm/gfxvm/vnc/start",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        reg.start.assert_called_once_with("gfxvm", 5901)
+        self.assertIn(b"19200", resp.data)
+
+    def test_vnc_start_no_port_configured(self):
+        v = self._running_vm()
+        csrf = _csrf(self.client)
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vm_vnc_port", return_value=None), \
+             patch("app.vm.vm_graphics_enabled", return_value=True), \
+             patch("app.vm.vnc_registry") as reg:
+            reg.get.return_value = None
+            resp = self.client.post("/vm/gfxvm/vnc/start",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        self.assertIn(b"graphics_port", resp.data)
+
+    def test_vnc_start_failure(self):
+        v = self._running_vm()
+        csrf = _csrf(self.client)
+        with patch("app.vm.list_vms", return_value=([v], None)), \
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vm_vnc_port", return_value=5901), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app._time.sleep"):
+            reg.start.return_value = (None, "no free port")
+            reg.get.return_value = None
+            resp = self.client.post("/vm/gfxvm/vnc/start",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        self.assertIn(b"failed", resp.data.lower())
+
+    def test_vnc_stop_success(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vnc_registry") as reg:
+            reg.stop.return_value = (True, "VNC console for 'gfxvm' stopped")
+            resp = self.client.post("/vm/gfxvm/vnc/stop",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        reg.stop.assert_called_once_with("gfxvm")
+        self.assertIn(b"stopped", resp.data.lower())
+
+    def test_vnc_stop_missing(self):
+        csrf = _csrf(self.client)
+        with patch("app.vm.vnc_registry") as reg, \
+             patch("app.vm.list_vms", return_value=([], None)), \
+             patch("app.vm.vm_detail", return_value=None), \
+             patch("app.vm.list_switches", return_value=([], None)):
+            reg.stop.return_value = (False, "no VNC session for 'x'")
+            resp = self.client.post("/vm/gfxvm/vnc/stop",
+                                    data={"csrf_token": csrf},
+                                    follow_redirects=True)
+        self.assertIn(b"no vnc session", resp.data.lower())
+
+    def test_api_vnc_returns_json(self):
+        with patch("app.vm.vnc_registry") as reg:
+            reg.list_all.return_value = [
+                {"name": "gfxvm", "ws_port": 19200, "vnc_port": 5901,
+                 "pid": 777, "alive": True}
+            ]
+            resp = self.client.get("/api/vnc")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["ws_port"], 19200)
+
+
 if __name__ == "__main__":
     unittest.main()
