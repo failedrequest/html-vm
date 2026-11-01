@@ -373,9 +373,6 @@ def vm_vnc_console(name):
     if target is None:
         flash("VM '{0}' not found".format(name), "error")
         return redirect(url_for("index"))
-    if not target["running"]:
-        flash("VM must be running to open a VNC console", "error")
-        return redirect(url_for("vm_detail", name=name))
     entry = vm.vnc_registry.get(name)
     graphics = vm.vm_graphics_enabled(name)
     vnc_port = vm.vm_vnc_port(name)

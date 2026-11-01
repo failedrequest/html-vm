@@ -1454,12 +1454,17 @@ class VncRouteTests(unittest.TestCase):
         self.assertIn(b"19200", resp.data)
         self.assertIn(b"Active", resp.data)
 
-    def test_vnc_page_stopped_vm_redirects(self):
+    def test_vnc_page_stopped_vm_shows_page(self):
         v = _make_vm("stopped", running=False)
         with patch("app.vm.list_vms", return_value=([v], None)), \
-             patch("app.vm.vm_detail", return_value=v):
+             patch("app.vm.vm_detail", return_value=v), \
+             patch("app.vm.vnc_registry") as reg, \
+             patch("app.vm.vm_graphics_enabled", return_value=True), \
+             patch("app.vm.vm_vnc_port", return_value=5901):
+            reg.get.return_value = None
             resp = self.client.get("/vm/stopped/vnc", follow_redirects=False)
-        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"not running", resp.data.lower())
 
     def test_vnc_start_success(self):
         v = self._running_vm()

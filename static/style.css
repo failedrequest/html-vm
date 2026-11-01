@@ -145,8 +145,12 @@ h3.sect-hdr { font-size: .9rem; font-weight: 700; text-transform: uppercase;
 .console-meta { margin-bottom: .8rem; }
 .ok { color: var(--ok); }
 #console-wrap { margin-top: .5rem; border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--border); background: #000; height: 600px; }
-#gotty-frame { width: 100%; height: 100%; border: none; display: block; }
+  border: 1px solid var(--border); background: #000;
+  height: calc(100vh - 280px); min-height: 480px; }
+#gotty-frame  { width: 100%; height: 100%; border: none; display: block; }
+#vnc-screen   { width: 100%; height: 100%; }
+#vnc-screen > :first-child { width: 100% !important; height: 100% !important; }
+.warn { color: var(--warn); }
 
 /* ── ISO upload progress ──────────────────────────────────────────── */
 .upload-progress { margin: .6rem 0; }

@@ -14,7 +14,7 @@
   <div class="two-col">
     <div>
       <span class="cap-label">Session</span>
-      <span class="cap-num stat ok">● Active</span>
+      <span class="cap-num stat ok" id="vnc-status-badge">● Connecting…</span>
     </div>
     <div>
       <span class="cap-label">PID</span>
@@ -38,12 +38,50 @@
 </div>
 
 <div id="console-wrap">
-  <iframe id="novnc-frame"
-          src="/novnc/vnc_lite.html?host={{ request.host.split(':')[0] }}&port={{ entry.ws_port }}&autoconnect=true"
-          allowfullscreen
-          title="VNC console for {{ v.name }}">
-  </iframe>
+  <div id="vnc-screen"></div>
 </div>
+
+<script type="module">
+import RFB from '/novnc/core/rfb.js';
+
+const host     = {{ request.host.split(':')[0] | tojson }};
+const port     = {{ entry.ws_port }};
+const badge    = document.getElementById('vnc-status-badge');
+const screen   = document.getElementById('vnc-screen');
+
+let rfb = null;
+let reconnectTimer = null;
+const RECONNECT_DELAY_MS = 3000;
+
+function connect() {
+  if (rfb) {
+    try { rfb.disconnect(); } catch(e) {}
+    rfb = null;
+  }
+  badge.textContent = '● Connecting…';
+  badge.className   = 'cap-num stat';
+
+  const url = `ws://${host}:${port}`;
+  rfb = new RFB(screen, url);
+  rfb.scaleViewport = true;
+  rfb.resizeSession = false;
+
+  rfb.addEventListener('connect', () => {
+    badge.textContent = '● Active';
+    badge.className   = 'cap-num stat ok';
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  });
+
+  rfb.addEventListener('disconnect', (e) => {
+    badge.textContent = e.detail.clean ? '● Disconnected' : '● Lost — reconnecting…';
+    badge.className   = 'cap-num stat warn';
+    // Always attempt to reconnect — covers clean VM reboots too
+    reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+  });
+}
+
+connect();
+</script>
 
 {% else %}
 {# ── no session yet ───────────────────────────────────────────────────── #}
@@ -59,12 +97,14 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="primary">⚙ Enable VNC graphics</button>
   </form>
+  {% elif not v.running %}
+  <p class="note">VM is not running. Start it first, then return here to open the VNC console.</p>
+  <a href="{{ url_for('vm_detail', name=v.name) }}" class="button primary">← VM detail</a>
   {% else %}
   <p>No active VNC session for <strong>{{ v.name }}</strong>.</p>
   <p class="note">
     Starting VNC launches <code>websockify</code> on a WebSocket port that proxies
     to the bhyve VNC listener on port <code>{{ vnc_port }}</code>.
-    noVNC connects in the iframe below.
   </p>
   <form method="post" action="{{ url_for('vnc_start', name=v.name) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
